@@ -1,26 +1,63 @@
 import React, { useEffect, useState } from 'react';
 import { MessageRow, listMessages, markMessageRead, submitMessage } from '../lib/supabase';
 import { useAdmin, useTrackView } from '../lib/context';
+import { SAFEENAH_URL } from '../components/Layout';
 
 export function AboutPage() {
   useTrackView('site', 'about');
   return (
     <div className="page about-page">
-      <h1>About Sirājan Munīrā</h1>
-      <p>
-        সৃজন মুনীরা (Sirājan Munīrā) is a book-annotation and knowledge-archiving imprint of Safeenah. A single curator
-        reads, annotates and archives structured findings from books, making every finding a deep-linkable, citable,
-        collectible unit of knowledge — browsable by book, or gathered across books into curated collections.
-      </p>
-      <p>
-        There are no reader accounts here. Anyone can browse, search, bookmark on their own device, and print a
-        traceable copy of any page — quietly, without being tracked by name.
-      </p>
+      <h1>About</h1>
+
+      <section className="landing-section" style={{ paddingTop: 0 }}>
+        <h2>What this is</h2>
+        <p>
+          Sirājan Munīrā is a book-annotation and knowledge-archiving imprint of{' '}
+          <a href={SAFEENAH_URL} target="_blank" rel="noopener noreferrer">Safeenah</a>. A single curator reads,
+          annotates and archives structured findings from books, making every finding a deep-linkable, citable,
+          collectible unit of knowledge — browsable by book, or gathered across books into curated collections.
+        </p>
+      </section>
+
+      <section className="landing-section">
+        <h2>Mission</h2>
+        <p>
+          To turn private reading notes into a public, permanent, and precisely citable archive — so a single
+          sentence found on page 214 of an out-of-print book is as easy to find and share as a modern web page.
+        </p>
+      </section>
+
+      <section className="landing-section">
+        <h2>Vision</h2>
+        <p>
+          A small, well-kept library outlasts a large, unkept one. This project favours depth over volume: fewer
+          books, read closely, annotated carefully, and organised so that a reader arriving years from now can still
+          find the exact passage they were looking for.
+        </p>
+      </section>
+
+      <section className="landing-section">
+        <h2>Editorial standards</h2>
+        <ul>
+          <li>Every finding is attributed to its book, and to a page number where one is available.</li>
+          <li>Findings are not edited to change their original meaning — only lightly formatted for reading.</li>
+          <li>Source links point to where a book can be verified or obtained, not to pirated copies.</li>
+          <li>There is one editor. Corrections and suggestions are welcome — see Contact.</li>
+        </ul>
+      </section>
+
+      <section className="landing-section" style={{ borderBottom: 'none' }}>
+        <h2>No accounts, ever</h2>
+        <p>
+          Readers browse anonymously. Bookmarks, theme, and font choices are stored only in your browser and never
+          leave your device. There is no reader sign-up, and there will not be one.
+        </p>
+      </section>
     </div>
   );
 }
 
-function ContactForm() {
+export function ContactForm({ compact }: { compact?: boolean }) {
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const [method, setMethod] = useState<'email' | 'whatsapp' | 'other'>('email');
@@ -42,14 +79,14 @@ function ContactForm() {
     }
   };
 
-  if (sent) return <p className="muted">ধন্যবাদ — আপনার বার্তা পৌঁছেছে। / Thank you — your message has been sent.</p>;
+  if (sent) return <p className="muted">Thank you — your message has been sent.</p>;
 
   return (
     <form className="contact-form" onSubmit={submit}>
-      <label>আপনার নাম / Your name <input value={name} onChange={(e) => setName(e.target.value)} required /></label>
-      <label>বার্তা / Message <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={5} required /></label>
+      <label>Your name <input value={name} onChange={(e) => setName(e.target.value)} required /></label>
+      <label>Message <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={compact ? 3 : 5} required /></label>
       <label>
-        যোগাযোগের মাধ্যম / Contact method
+        Contact method
         <select value={method} onChange={(e) => setMethod(e.target.value as any)}>
           <option value="email">Email</option>
           <option value="whatsapp">WhatsApp</option>
@@ -60,7 +97,9 @@ function ContactForm() {
         {method === 'email' ? 'Email address' : method === 'whatsapp' ? 'WhatsApp number' : 'Contact detail'}
         <input value={value} onChange={(e) => setValue(e.target.value)} required />
       </label>
-      <button className="primary" disabled={busy} type="submit">{busy ? '…' : 'পাঠান / Send'}</button>
+      <button className="primary" disabled={busy} type="submit" style={{ alignSelf: 'flex-start' }}>
+        {busy ? 'Sending…' : 'Send message'}
+      </button>
     </form>
   );
 }
@@ -101,7 +140,7 @@ export function ContactPage() {
   useTrackView('site', 'contact');
   return (
     <div className="page contact-page">
-      <h1>যোগাযোগ / Contact</h1>
+      <h1>Contact</h1>
       <p className="muted">Have a correction, a book suggestion, or a question? Send a message below.</p>
       <ContactForm />
       {isAdmin && <AdminInbox />}

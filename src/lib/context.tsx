@@ -67,17 +67,17 @@ export function useAdmin() {
 // ---------------------------------------------------------------------------
 
 export const THEMES = [
-  { id: 'paper-light', label: 'Paper Light', group: 'light' },
-  { id: 'ivory', label: 'Ivory', group: 'light' },
-  { id: 'sepia', label: 'Sepia', group: 'sepia' },
-  { id: 'old-manuscript', label: 'Old Manuscript', group: 'sepia' },
-  { id: 'slate-dark', label: 'Slate Dark', group: 'dark' },
-  { id: 'midnight', label: 'Midnight', group: 'low-light' },
-  { id: 'charcoal', label: 'Charcoal', group: 'dark' },
-  { id: 'forest', label: 'Forest', group: 'dark' },
-  { id: 'high-contrast-light', label: 'High Contrast (Light)', group: 'high-contrast' },
-  { id: 'high-contrast-dark', label: 'High Contrast (Dark)', group: 'high-contrast' },
-  { id: 'rose-dusk', label: 'Rose Dusk', group: 'low-light' },
+  { id: 'paper-light', label: 'Paper Light', group: 'light', mode: 'light' },
+  { id: 'ivory', label: 'Ivory', group: 'light', mode: 'light' },
+  { id: 'sepia', label: 'Sepia', group: 'sepia', mode: 'light' },
+  { id: 'old-manuscript', label: 'Old Manuscript', group: 'sepia', mode: 'light' },
+  { id: 'slate-dark', label: 'Slate Dark', group: 'dark', mode: 'dark' },
+  { id: 'midnight', label: 'Midnight', group: 'low-light', mode: 'dark' },
+  { id: 'charcoal', label: 'Charcoal', group: 'dark', mode: 'dark' },
+  { id: 'forest', label: 'Forest', group: 'dark', mode: 'dark' },
+  { id: 'high-contrast-light', label: 'High Contrast (Light)', group: 'high-contrast', mode: 'light' },
+  { id: 'high-contrast-dark', label: 'High Contrast (Dark)', group: 'high-contrast', mode: 'dark' },
+  { id: 'rose-dusk', label: 'Rose Dusk', group: 'low-light', mode: 'dark' },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]['id'];
@@ -131,6 +131,7 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-theme-mode', THEMES.find((t) => t.id === theme)?.mode || 'light');
     localStorage.setItem('sm_theme', JSON.stringify(theme));
   }, [theme]);
 

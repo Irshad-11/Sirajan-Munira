@@ -2,6 +2,25 @@ import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { SearchResult, siteSearch } from '../lib/supabase';
 
+const TYPE_LABEL: Record<SearchResult['type'], string> = {
+  book: 'Book',
+  category: 'Collection',
+  heading: 'Finding',
+};
+
+function ResultRow({ r }: { r: SearchResult }) {
+  return (
+    <Link to={r.href} className="row-item" style={{ textDecoration: 'none', color: 'inherit' }}>
+      {r.image ? <img src={r.image} alt="" className="row-thumb" /> : <div className="row-thumb-placeholder" />}
+      <div className="row-body">
+        <p className="row-meta">{TYPE_LABEL[r.type]}</p>
+        <p className="row-title">{r.title}</p>
+        {r.subtitle && <p className="row-excerpt">{r.subtitle}</p>}
+      </div>
+    </Link>
+  );
+}
+
 export default function SearchPage() {
   const [params] = useSearchParams();
   const q = params.get('q') || '';
@@ -16,41 +35,16 @@ export default function SearchPage() {
       .finally(() => setLoading(false));
   }, [q]);
 
-  const grouped = {
-    book: results.filter((r) => r.type === 'book'),
-    category: results.filter((r) => r.type === 'category'),
-    heading: results.filter((r) => r.type === 'heading'),
-  };
-
   return (
     <div className="page search-page">
-      <h1>সার্চ ফলাফল / Search results for "{q}"</h1>
-      {loading && <p className="muted">খোঁজা হচ্ছে…</p>}
-      {!loading && results.length === 0 && q && <p className="muted">কিছু পাওয়া যায়নি। / Nothing found.</p>}
-
-      {grouped.book.length > 0 && (
-        <section>
-          <h3>বই / Books</h3>
-          {grouped.book.map((r) => <Link key={r.id} to={r.href} className="search-result-row"><strong>{r.title}</strong>{r.subtitle && <span className="muted"> — {r.subtitle}</span>}</Link>)}
-        </section>
-      )}
-      {grouped.category.length > 0 && (
-        <section>
-          <h3>কালেকশন / Collections</h3>
-          {grouped.category.map((r) => <Link key={r.id} to={r.href} className="search-result-row"><strong>{r.title}</strong></Link>)}
-        </section>
-      )}
-      {grouped.heading.length > 0 && (
-        <section>
-          <h3>ফাইন্ডিংস / Findings</h3>
-          {grouped.heading.map((r) => (
-            <Link key={r.id} to={r.href} className="search-result-row">
-              <strong>{r.title}</strong>
-              {r.subtitle && <p className="muted excerpt">{r.subtitle}</p>}
-            </Link>
-          ))}
-        </section>
-      )}
+      <div className="page-head">
+        <h1>Search results for "{q}"</h1>
+      </div>
+      {loading && <p className="muted">Searching…</p>}
+      {!loading && results.length === 0 && q && <p className="muted">Nothing found.</p>}
+      <div className="row-list">
+        {results.map((r) => <ResultRow key={`${r.type}-${r.id}`} r={r} />)}
+      </div>
     </div>
   );
 }

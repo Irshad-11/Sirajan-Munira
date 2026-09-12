@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAdmin, usePrefs, THEMES } from '../lib/context';
 
+export const SAFEENAH_URL = 'https://irshad-11.github.io/Safeenah/';
+
 // ---------------------------------------------------------------------------
 // Admin login box (FR-27): minimal box bottom-right, no dedicated page
 // ---------------------------------------------------------------------------
@@ -30,12 +32,12 @@ function AdminLoginBox() {
     <div className="admin-login-box">
       <button className="close-x" onClick={() => setLoginOpen(false)} aria-label="Close">✕</button>
       <form onSubmit={submit}>
-        <h4>Admin Login</h4>
+        <h4>Admin login</h4>
         <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         {error && <p className="form-error">{error}</p>}
         <button type="submit" disabled={busy} className="primary">
-          {busy ? '…' : 'Log in'}
+          {busy ? 'Signing in…' : 'Log in'}
         </button>
       </form>
     </div>
@@ -53,15 +55,15 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
     <div className="settings-backdrop" onClick={onClose}>
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
         <div className="settings-head">
-          <h3>সেটিংস / Settings</h3>
+          <h3>Settings</h3>
           <button onClick={onClose}>✕</button>
         </div>
 
         <section>
-          <h4>থিম / Theme</h4>
+          <h4>Theme</h4>
           <div className="theme-grid">
             {THEMES.map((t) => (
-              <button key={t.id} className={`theme-swatch ${theme === t.id ? 'active' : ''}`} data-theme-preview={t.id} onClick={() => setTheme(t.id)}>
+              <button key={t.id} className={`theme-swatch ${theme === t.id ? 'active' : ''}`} onClick={() => setTheme(t.id)}>
                 {t.label}
               </button>
             ))}
@@ -69,7 +71,7 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
-          <h4>ইংরেজি ফন্ট / English font</h4>
+          <h4>Font</h4>
           <div className="font-choices">
             {(['inter', 'roboto', 'lora'] as const).map((f) => (
               <button key={f} className={englishFont === f ? 'active' : ''} onClick={() => setEnglishFont(f)}>
@@ -80,14 +82,14 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
-          <h4>কপি ফরম্যাট / Copy format</h4>
+          <h4>Copy format</h4>
           <label className="check"><input type="checkbox" checked={copySettings.includeBookTitle} onChange={(e) => setCopySettings({ ...copySettings, includeBookTitle: e.target.checked })} /> Book title</label>
           <label className="check"><input type="checkbox" checked={copySettings.includePageNumber} onChange={(e) => setCopySettings({ ...copySettings, includePageNumber: e.target.checked })} /> Page number</label>
           <label className="check"><input type="checkbox" checked={copySettings.includeSourceLink} onChange={(e) => setCopySettings({ ...copySettings, includeSourceLink: e.target.checked })} /> Source link</label>
         </section>
 
         <section>
-          <h4>লোকাল ডেটা / Local data</h4>
+          <h4>Local data</h4>
           <p className="muted">{bookmarks.length} bookmark(s) saved on this device.</p>
           <button className="danger" onClick={() => { if (confirm('Clear bookmarks, theme and font preferences from this device?')) clearLocalData(); }}>
             Clear local data
@@ -116,26 +118,26 @@ export function NavBar() {
   return (
     <header className={`site-nav ${isAdmin ? 'admin-mode' : ''}`}>
       <Link to="/" className="brand">
-        <span className="brand-main">সৃজন মুনীরা</span>
-        <span className="brand-sub">Sirājan Munīrā · an imprint of Safeenah</span>
+        <span className="brand-main">Sirājan Munīrā</span>
+        <span className="brand-sub">an imprint of Safeenah</span>
       </Link>
       <nav>
-        <NavLink to="/books">বইঘর / Bookshelf</NavLink>
-        <NavLink to="/collections">সংগ্রহ / Collections</NavLink>
+        <NavLink to="/books">Bookshelf</NavLink>
+        <NavLink to="/collections">Collections</NavLink>
         {isAdmin && <NavLink to="/drafts">Drafts</NavLink>}
         {isAdmin && <NavLink to="/analytics">Analytics</NavLink>}
         <NavLink to="/about">About</NavLink>
         <NavLink to="/contact">Contact</NavLink>
       </nav>
       <form className="nav-search" onSubmit={submitSearch}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="সার্চ / Search…" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" />
       </form>
       <div className="nav-actions">
-        <button onClick={() => setSettingsOpen(true)} title="Settings" className="icon-btn">⚙</button>
+        <button onClick={() => setSettingsOpen(true)} title="Settings" className="icon-btn">Settings</button>
         {isAdmin ? (
-          <button onClick={logout} className="icon-btn admin-tag">Admin ⏻</button>
+          <button onClick={logout} className="icon-btn admin-tag">Admin — log out</button>
         ) : (
-          <button onClick={() => setLoginOpen(true)} className="icon-btn">Admin Login</button>
+          <button onClick={() => setLoginOpen(true)} className="icon-btn">Admin login</button>
         )}
       </div>
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
@@ -149,8 +151,11 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div className="footer-cols">
         <div>
-          <h5>সৃজন মুনীরা</h5>
-          <p className="muted">An imprint of Safeenah — a book-annotation and knowledge-archiving project.</p>
+          <h5>Sirājan Munīrā</h5>
+          <p className="muted">
+            An imprint of <a href={SAFEENAH_URL} target="_blank" rel="noopener noreferrer">Safeenah</a> — a book-annotation
+            and knowledge-archiving project.
+          </p>
         </div>
         <div>
           <h5>Navigate</h5>
@@ -159,8 +164,8 @@ export function SiteFooter() {
           <Link to="/about">About</Link>
         </div>
         <div>
-          <h5>Legal & Contact</h5>
-          <Link to="/contact">Contact</Link>
+          <h5>Contact</h5>
+          <Link to="/contact">Send a message</Link>
           <span className="muted">© {new Date().getFullYear()} Safeenah.</span>
         </div>
       </div>

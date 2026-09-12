@@ -1,121 +1,98 @@
-import React, { Suspense, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Canvas, useFrame } from '@react-three/fiber';
 import { useTrackView } from '../lib/context';
-import { getLiveStats } from '../lib/supabase';
+import { Book, Category, getLiveStats, listBooks, listCategories } from '../lib/supabase';
+import { ContactForm } from './StaticPages';
 
-// ---------------------------------------------------------------------------
-// Procedural 3D book (FR-34) — no external asset, built from primitives,
-// styled to match the site's palette, animates on scroll.
-// ---------------------------------------------------------------------------
-
-function BookMesh({ scrollProgress }: { scrollProgress: React.MutableRefObject<number> }) {
-  const group = useRef<any>(null);
-  const coverLeft = useRef<any>(null);
-  const coverRight = useRef<any>(null);
-
-  useFrame((state) => {
-    const p = scrollProgress.current; // 0 -> 1 over hero height
-    if (group.current) {
-      group.current.rotation.y = 0.6 + p * 2.4 + Math.sin(state.clock.elapsedTime * 0.3) * 0.05;
-      group.current.position.y = -0.2 + p * 0.3;
-    }
-    if (coverRight.current) {
-      // "opens" the book as the user scrolls
-      coverRight.current.rotation.y = -Math.min(p * 2.2, 1.4);
-    }
-  });
-
+// A small, quiet illustration — a sheet of paper, a few ruled lines, a pen.
+// No 3D, no animation: just a mark that says "this is a place for writing."
+function PaperAndPenDoodle() {
   return (
-    <group ref={group} rotation={[0.15, 0.6, 0]}>
-      {/* pages block */}
-      <mesh position={[0, 0, 0]}>
-        <boxGeometry args={[1.55, 2.1, 0.32]} />
-        <meshStandardMaterial color="#f4ecd8" />
-      </mesh>
-      {/* spine */}
-      <mesh position={[-0.8, 0, 0]}>
-        <boxGeometry args={[0.05, 2.15, 0.36]} />
-        <meshStandardMaterial color="#5a3d2b" />
-      </mesh>
-      {/* left cover (fixed) */}
-      <mesh ref={coverLeft} position={[0, 0, -0.18]}>
-        <boxGeometry args={[1.6, 2.15, 0.04]} />
-        <meshStandardMaterial color="#7a4f2b" />
-      </mesh>
-      {/* right cover (opens) */}
-      <group position={[0.78, 0, 0.16]}>
-        <mesh ref={coverRight} position={[0.02, 0, 0]}>
-          <boxGeometry args={[1.56, 2.15, 0.04]} />
-          <meshStandardMaterial color="#8a5a34" />
-        </mesh>
-      </group>
-    </group>
-  );
-}
-
-function Hero3D() {
-  const scrollProgress = useRef(0);
-
-  useEffect(() => {
-    const heroHeight = 640;
-    const onScroll = () => {
-      scrollProgress.current = Math.min(1, Math.max(0, window.scrollY / heroHeight));
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
-  return (
-    <Canvas camera={{ position: [0, 0, 5], fov: 42 }} dpr={[1, 1.5]}>
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[3, 4, 5]} intensity={1.1} />
-      <directionalLight position={[-3, -2, -4]} intensity={0.3} />
-      <Suspense fallback={null}>
-        <BookMesh scrollProgress={scrollProgress} />
-      </Suspense>
-    </Canvas>
+    <svg className="masthead-doodle" width="180" height="70" viewBox="0 0 180 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="30" y="8" width="90" height="56" rx="1" stroke="var(--border)" strokeWidth="1.5" />
+      <line x1="40" y1="24" x2="100" y2="24" stroke="var(--border)" strokeWidth="1.2" />
+      <line x1="40" y1="34" x2="110" y2="34" stroke="var(--border)" strokeWidth="1.2" />
+      <line x1="40" y1="44" x2="90" y2="44" stroke="var(--border)" strokeWidth="1.2" />
+      <line x1="40" y1="54" x2="104" y2="54" stroke="var(--muted)" strokeWidth="1.2" strokeDasharray="2 2" />
+      <path d="M112 50 L150 14" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
+      <path d="M150 14 L156 8 L162 14 L156 20 Z" fill="var(--accent)" />
+      <path d="M110 52 L114 48 L108 50 Z" fill="var(--fg)" />
+    </svg>
   );
 }
 
 export default function Landing() {
   const [stats, setStats] = useState<{ books: number; categories: number; visitors: number } | null>(null);
+  const [recentBooks, setRecentBooks] = useState<Book[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   useTrackView('site', 'landing');
 
   useEffect(() => {
     getLiveStats().then(setStats).catch(() => setStats({ books: 0, categories: 0, visitors: 0 }));
+    listBooks({ includeHidden: false }).then((b) => setRecentBooks(b.slice(0, 5)));
+    listCategories().then((c) => setCategories(c.slice(0, 5)));
   }, []);
 
   return (
     <div className="landing-page">
-      <section className="hero">
-        <div className="hero-3d"><Hero3D /></div>
-        <div className="hero-copy">
-          <h1>সৃজন মুনীরা</h1>
-          <p className="hero-tagline">Sirājan Munīrā — a book-annotation and knowledge-archiving imprint of Safeenah.</p>
-          <div className="hero-actions">
-            <Link to="/books" className="primary">বইঘর দেখুন / Browse the Bookshelf</Link>
-            <Link to="/collections" className="secondary">সংগ্রহ দেখুন / Explore Collections</Link>
-          </div>
+      <div className="masthead">
+        <h1>Sirājan Munīrā</h1>
+        <p className="tagline">A book-annotation and knowledge-archiving imprint of Safeenah.</p>
+        <PaperAndPenDoodle />
+      </div>
+
+      <section className="landing-section">
+        <h2>What you'll find here</h2>
+        <p>
+          This is a working archive of findings pulled from books — quotes, notes, and short passages, each kept as
+          its own permanent, linkable page. There are no reader accounts. Browse the bookshelf, follow a collection,
+          or search for a phrase you half-remember. Bookmarks and reading preferences live only in your browser.
+        </p>
+        <p>
+          <Link to="/books">→ Browse the Bookshelf</Link><br />
+          <Link to="/collections">→ Explore Collections</Link><br />
+          <Link to="/about">→ Read more about this project</Link>
+        </p>
+      </section>
+
+      {recentBooks.length > 0 && (
+        <section className="landing-section">
+          <h2>Recently added books</h2>
+          <ul className="landing-list">
+            {recentBooks.map((b) => (
+              <li key={b.id}>
+                <Link to={`/book/${b.slug}`}>{b.title}</Link>
+                {b.author && <span className="muted"> — {b.author}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {categories.length > 0 && (
+        <section className="landing-section">
+          <h2>Collections</h2>
+          <ul className="landing-list">
+            {categories.map((c) => (
+              <li key={c.id}><Link to={`/collections/${c.id}`}>{c.name}</Link></li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="landing-section">
+        <h2>By the numbers</h2>
+        <div className="landing-stats">
+          <div><strong>{stats?.books ?? '—'}</strong>books</div>
+          <div><strong>{stats?.categories ?? '—'}</strong>collections</div>
+          <div><strong>{stats?.visitors ?? '—'}</strong>visitors</div>
         </div>
       </section>
 
-      <section className="stats-block">
-        <div className="stat"><span className="stat-num">{stats?.books ?? '—'}</span><span>বই / Books</span></div>
-        <div className="stat"><span className="stat-num">{stats?.categories ?? '—'}</span><span>কালেকশন / Collections</span></div>
-        <div className="stat"><span className="stat-num">{stats?.visitors ?? '—'}</span><span>ভিজিটর / Visitors</span></div>
-      </section>
-
-      <section className="landing-teaser">
-        <div>
-          <h3>প্রতিটি হেডিং একটি ইউনিট</h3>
-          <p className="muted">Every finding is deep-linkable, copyable in a citable format, and collectible into curated
-          collections — without ever needing an account.</p>
-        </div>
-        <div>
-          <h3>Read your way</h3>
-          <p className="muted">Eleven reading themes, adjustable fonts, and bookmarks that live only on your device.</p>
-        </div>
+      <section className="landing-section" style={{ borderBottom: 'none' }}>
+        <h2>Send a message</h2>
+        <p className="muted">Suggest a book, point out an error, or just say hello.</p>
+        <ContactForm compact />
       </section>
     </div>
   );

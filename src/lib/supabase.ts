@@ -288,13 +288,13 @@ export async function deleteCategory(id: string): Promise<void> {
 
 export interface CategoryHeadingDetail {
   heading: Heading;
-  book: Pick<Book, 'id' | 'slug' | 'title' | 'author'>;
+  book: Pick<Book, 'id' | 'slug' | 'title' | 'author' | 'cover_image_url'>;
 }
 
 export async function listCategoryHeadings(categoryId: string): Promise<CategoryHeadingDetail[]> {
   const { data, error } = await supabase
     .from('category_headings')
-    .select('heading:headings(*, book:books(id, slug, title, author))')
+    .select('heading:headings(*, book:books(id, slug, title, author, cover_image_url))')
     .eq('category_id', categoryId);
   if (error) throw error;
   return ((data as any) || [])
@@ -489,6 +489,7 @@ export interface SearchResult {
   title: string;
   subtitle?: string;
   href: string;
+  image?: string | null;
 }
 
 export async function siteSearch(query: string): Promise<SearchResult[]> {
@@ -497,22 +498,22 @@ export async function siteSearch(query: string): Promise<SearchResult[]> {
   const like = `%${term}%`;
 
   const [booksByMeta, categories, headingsByBook] = await Promise.all([
-    supabase.from('books').select('id, slug, title, author').eq('visibility', true).or(`title.ilike.${like},author.ilike.${like}`),
-    supabase.from('categories').select('id, name').ilike('name', like),
+    supabase.from('books').select('id, slug, title, author, cover_image_url').eq('visibility', true).or(`title.ilike.${like},author.ilike.${like}`),
+    supabase.from('categories').select('id, name, banner_image_url').ilike('name', like),
     supabase
       .from('headings')
-      .select('id, book_id, content, books!inner(slug, title, visibility)')
+      .select('id, book_id, content, books!inner(slug, title, cover_image_url, visibility)')
       .eq('books.visibility', true),
   ]);
 
   const results: SearchResult[] = [];
 
   (booksByMeta.data || []).forEach((b: any) => {
-    results.push({ type: 'book', id: b.id, title: b.title, subtitle: b.author || undefined, href: `/book/${b.slug}` });
+    results.push({ type: 'book', id: b.id, title: b.title, subtitle: b.author || undefined, href: `/book/${b.slug}`, image: b.cover_image_url });
   });
 
   (categories.data || []).forEach((c: any) => {
-    results.push({ type: 'category', id: c.id, title: c.name, href: `/collections/${c.id}` });
+    results.push({ type: 'category', id: c.id, title: c.name, href: `/collections/${c.id}`, image: c.banner_image_url });
   });
 
   // Full-text scan across heading rich-text bodies (client-side substring match,
@@ -529,6 +530,7 @@ export async function siteSearch(query: string): Promise<SearchResult[]> {
         title: h.books.title,
         subtitle: `…${snippet}…`,
         href: `/book/${h.books.slug}#${h.id}`,
+        image: h.books.cover_image_url,
       });
     }
   });

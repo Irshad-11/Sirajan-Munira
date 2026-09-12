@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent, ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, Node, Mark } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -62,7 +62,7 @@ function AccordionView({ node, updateAttributes }: any) {
           contentEditable={false}
           value={node.attrs.title}
           onChange={(e) => updateAttributes({ title: e.target.value })}
-          placeholder="শিরোনাম / Section title…"
+          placeholder="Section title…"
         />
       </div>
       {node.attrs.open && (
@@ -81,7 +81,7 @@ const Accordion = Node.create({
   addAttributes() {
     return {
       open: { default: true },
-      title: { default: 'বিস্তারিত / Details' },
+      title: { default: 'Details' },
     };
   },
   parseHTML() {
@@ -103,6 +103,9 @@ const Accordion = Node.create({
 
 // ---------------------------------------------------------------------------
 // Custom node: annotated image (FR-9)
+// A plain <img> renders the photo; a transparent <canvas> is stacked exactly
+// on top of it (same box, via CSS) purely to catch the pen strokes. On save
+// the two layers are flattened together onto an offscreen canvas.
 // ---------------------------------------------------------------------------
 
 function AnnotatedImageView({ node, updateAttributes }: any) {
@@ -111,18 +114,29 @@ function AnnotatedImageView({ node, updateAttributes }: any) {
   const imgRef = useRef<HTMLImageElement | null>(null);
   const drawing = useRef(false);
   const [color, setColor] = useState('#ff3b30');
+  const [ready, setReady] = useState(false);
 
-  const openAnnotate = () => setAnnotating(true);
-
-  const startCanvas = useCallback(() => {
+  const sizeCanvasToImage = useCallback(() => {
     const canvas = canvasRef.current;
     const img = imgRef.current;
-    if (!canvas || !img) return;
+    if (!canvas || !img || !img.naturalWidth) return;
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    setReady(true);
   }, []);
+
+  // Handles both the "image loads while modal is already open" case and the
+  // "image was already cached before the modal mounted" case.
+  useEffect(() => {
+    if (!annotating) {
+      setReady(false);
+      return;
+    }
+    const img = imgRef.current;
+    if (img?.complete && img.naturalWidth) {
+      sizeCanvasToImage();
+    }
+  }, [annotating, sizeCanvasToImage]);
 
   const pointerDown = (e: React.PointerEvent) => {
     drawing.current = true;
@@ -144,23 +158,25 @@ function AnnotatedImageView({ node, updateAttributes }: any) {
   };
 
   const saveAnnotation = () => {
-    const canvas = canvasRef.current!;
-    const dataUrl = canvas.toDataURL('image/png');
-    updateAttributes({ annotationSrc: dataUrl });
+    const strokes = canvasRef.current!;
+    const img = imgRef.current!;
+    const out = document.createElement('canvas');
+    out.width = strokes.width;
+    out.height = strokes.height;
+    const ctx = out.getContext('2d')!;
+    ctx.drawImage(img, 0, 0, out.width, out.height);
+    ctx.drawImage(strokes, 0, 0);
+    updateAttributes({ annotationSrc: out.toDataURL('image/png') });
     setAnnotating(false);
   };
 
-  const clearAnnotation = () => {
-    updateAttributes({ annotationSrc: null });
-  };
-
+  const clearAnnotation = () => updateAttributes({ annotationSrc: null });
   const setSize = (size: 'small' | 'medium' | 'large') => updateAttributes({ size });
 
   const displaySrc = node.attrs.annotationSrc || node.attrs.src;
 
   return (
     <NodeViewWrapper className={`rt-image-node rt-image-${node.attrs.size}`} contentEditable={false}>
-      <img ref={imgRef} src={node.attrs.src} alt={node.attrs.alt || ''} style={{ display: 'none' }} onLoad={startCanvas} />
       <img src={displaySrc} alt={node.attrs.alt || ''} className="rt-image-preview" />
       <div className="rt-image-toolbar">
         <div className="size-group">
@@ -170,8 +186,8 @@ function AnnotatedImageView({ node, updateAttributes }: any) {
             </button>
           ))}
         </div>
-        <button onClick={openAnnotate}>এনোটেট / Annotate</button>
-        {node.attrs.annotationSrc && <button onClick={clearAnnotation}>মুছুন / Clear</button>}
+        <button onClick={() => setAnnotating(true)}>Annotate</button>
+        {node.attrs.annotationSrc && <button onClick={clearAnnotation}>Clear annotation</button>}
       </div>
       {annotating && (
         <div className="annotate-modal-backdrop" onClick={() => setAnnotating(false)}>
@@ -185,18 +201,19 @@ function AnnotatedImageView({ node, updateAttributes }: any) {
                   onClick={() => setColor(c)}
                 />
               ))}
-              <button onClick={saveAnnotation} className="save-btn">
-                Save
-              </button>
+              <button onClick={saveAnnotation} className="save-btn" disabled={!ready}>Save</button>
               <button onClick={() => setAnnotating(false)}>Cancel</button>
             </div>
-            <canvas
-              ref={canvasRef}
-              onPointerDown={pointerDown}
-              onPointerMove={draw}
-              onPointerUp={pointerUp}
-              onPointerLeave={pointerUp}
-            />
+            <div className="annotate-canvas-wrap">
+              <img ref={imgRef} src={node.attrs.src} alt="" onLoad={sizeCanvasToImage} />
+              <canvas
+                ref={canvasRef}
+                onPointerDown={pointerDown}
+                onPointerMove={draw}
+                onPointerUp={pointerUp}
+                onPointerLeave={pointerUp}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -258,7 +275,7 @@ function LinkPopup({ editor, onClose }: { editor: any; onClose: () => void }) {
     <div className="link-popup-backdrop" onClick={onClose}>
       <div className="link-popup" onClick={(e) => e.stopPropagation()}>
         <label>
-          লেখা / Text
+          Text
           <input value={text} onChange={(e) => setText(e.target.value)} />
         </label>
         <label>
@@ -266,10 +283,8 @@ function LinkPopup({ editor, onClose }: { editor: any; onClose: () => void }) {
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" autoFocus />
         </label>
         <div className="link-popup-actions">
-          <button onClick={apply} className="primary">
-            যোগ করুন / Apply
-          </button>
-          <button onClick={onClose}>বাতিল / Cancel</button>
+          <button onClick={apply} className="primary">Apply</button>
+          <button onClick={onClose} className="secondary">Cancel</button>
         </div>
       </div>
     </div>
@@ -281,12 +296,20 @@ function LinkPopup({ editor, onClose }: { editor: any; onClose: () => void }) {
 // ---------------------------------------------------------------------------
 
 const HIGHLIGHT_COLORS = ['#fff3a3', '#ffd6d6', '#d6ffe0', '#d6e8ff', '#f0d6ff'];
-const FONT_COLORS = ['#1a1a1a', '#b3261e', '#1e6b3a', '#1c4fa1', '#7a4fbf'];
+// Mid-saturation hues stay legible against both light and dark theme
+// backgrounds; "Auto" clears the mark so text falls back to the theme color.
+const FONT_COLORS: { label: string; value: string | null }[] = [
+  { label: 'Auto', value: null },
+  { label: 'Red', value: '#c94f4f' },
+  { label: 'Green', value: '#3f9e5e' },
+  { label: 'Blue', value: '#3f7fc9' },
+  { label: 'Purple', value: '#8f5fc9' },
+];
 const FONT_FAMILIES = [
+  { label: 'Editorial (Lora)', value: 'Lora, serif' },
   { label: 'Inter', value: 'Inter, sans-serif' },
   { label: 'Roboto', value: 'Roboto, sans-serif' },
-  { label: 'Lora', value: 'Lora, serif' },
-  { label: 'Hind Siliguri', value: '"Hind Siliguri", sans-serif' },
+  { label: 'Bangla (Hind Siliguri)', value: '"Hind Siliguri", sans-serif' },
 ];
 
 function Toolbar({ editor, imagePathPrefix }: { editor: any; imagePathPrefix: string }) {
@@ -311,11 +334,11 @@ function Toolbar({ editor, imagePathPrefix }: { editor: any; imagePathPrefix: st
           else editor.chain().focus().toggleHeading({ level: Number(v[1]) }).run();
         }}
       >
-        <option value="p">সাধারণ / Normal</option>
-        <option value="h1">H1</option>
-        <option value="h2">H2</option>
-        <option value="h3">H3</option>
-        <option value="h4">H4</option>
+        <option value="p">Normal text</option>
+        <option value="h1">Heading 1</option>
+        <option value="h2">Heading 2</option>
+        <option value="h3">Heading 3</option>
+        <option value="h4">Heading 4</option>
       </select>
 
       <button className={btn(editor.isActive('bold'))} onClick={() => editor.chain().focus().toggleBold().run()}><b>B</b></button>
@@ -329,11 +352,17 @@ function Toolbar({ editor, imagePathPrefix }: { editor: any; imagePathPrefix: st
         <button onClick={() => editor.chain().focus().unsetHighlight().run()}>✕</button>
       </div>
 
-      <div className="swatch-group" title="Font color">
-        {FONT_COLORS.map((c) => (
-          <button key={c} className="swatch round" style={{ background: c }} onClick={() => editor.chain().focus().setColor(c).run()} />
-        ))}
-      </div>
+      <select
+        onChange={(e) => {
+          const found = FONT_COLORS.find((c) => c.label === e.target.value);
+          if (!found || found.value === null) editor.chain().focus().unsetColor().run();
+          else editor.chain().focus().setColor(found.value).run();
+        }}
+        defaultValue=""
+      >
+        <option value="" disabled>Color</option>
+        {FONT_COLORS.map((f) => <option key={f.label} value={f.label}>{f.label}</option>)}
+      </select>
 
       <select onChange={(e) => editor.chain().focus().extendMarkRange('fontFamily').setMark('fontFamily', { family: e.target.value }).run()} defaultValue="">
         <option value="" disabled>Font</option>
@@ -350,14 +379,14 @@ function Toolbar({ editor, imagePathPrefix }: { editor: any; imagePathPrefix: st
 
       <button className={btn(editor.isActive('bulletList'))} onClick={() => editor.chain().focus().toggleBulletList().run()}>• List</button>
       <button className={btn(editor.isActive('orderedList'))} onClick={() => editor.chain().focus().toggleOrderedList().run()}>1. List</button>
-      <button className={btn(editor.isActive('blockquote'))} onClick={() => editor.chain().focus().toggleBlockquote().run()}>❝ Quote</button>
-      <button onClick={() => editor.chain().focus().setHorizontalRule().run()}>―</button>
+      <button className={btn(editor.isActive('blockquote'))} onClick={() => editor.chain().focus().toggleBlockquote().run()}>Quote</button>
+      <button onClick={() => editor.chain().focus().setHorizontalRule().run()}>Rule</button>
 
-      <button onClick={() => setShowLink(true)}>🔗 Link</button>
-      <button onClick={() => editor.chain().focus().insertContent({ type: 'accordion', attrs: { open: true, title: 'বিস্তারিত / Details' }, content: [{ type: 'paragraph' }] }).run()}>
-        ▾ Accordion
+      <button onClick={() => setShowLink(true)}>Link</button>
+      <button onClick={() => editor.chain().focus().insertContent({ type: 'accordion', attrs: { open: true, title: 'Details' }, content: [{ type: 'paragraph' }] }).run()}>
+        Accordion
       </button>
-      <button onClick={() => fileRef.current?.click()}>🖼 Image</button>
+      <button onClick={() => fileRef.current?.click()}>Image</button>
       <input
         ref={fileRef}
         type="file"
@@ -403,7 +432,7 @@ export function RichEditor({
       Highlight.configure({ multicolor: true }),
       Link.configure({ openOnClick: false, autolink: false }),
       HorizontalRule,
-      Placeholder.configure({ placeholder: placeholder || 'লিখতে শুরু করুন…' }),
+      Placeholder.configure({ placeholder: placeholder || 'Start writing…' }),
       Accordion,
       AnnotatedImage,
     ],

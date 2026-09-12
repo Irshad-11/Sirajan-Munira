@@ -99,9 +99,9 @@ export default function Drafts() {
         </section>
         <section className="draft-editor-pane">
           {activeDraft ? (
-            <RichEditor content={activeDraft.content} onChange={saveContent} imagePathPrefix={`drafts/${activeDraft.id}`} autosaveKey={`draft-${activeDraft.id}`} placeholder="দ্রুত নোট লিখুন…" />
+            <RichEditor content={activeDraft.content} onChange={saveContent} imagePathPrefix={`drafts/${activeDraft.id}`} autosaveKey={`draft-${activeDraft.id}`} placeholder="Quick note…" />
           ) : (
-            <p className="muted">একটি নোট বাছাই করুন বা নতুন তৈরি করুন। / Select or create a note.</p>
+            <p className="muted">Select or create a note.</p>
           )}
         </section>
       </div>

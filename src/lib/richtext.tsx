@@ -176,7 +176,7 @@ function Node({ node }: { node: any }): React.ReactElement | null {
     case 'accordion':
       return (
         <details className="rt-accordion" open={!!node.attrs?.open}>
-          <summary>{node.attrs?.title || 'বিস্তারিত / Details'}</summary>
+          <summary>{node.attrs?.title || 'Details'}</summary>
           <div className="rt-accordion-body">
             {(node.content || []).map((c: any, i: number) => <Node key={i} node={c} />)}
           </div>

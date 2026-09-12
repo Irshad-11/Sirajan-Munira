@@ -16,7 +16,7 @@ import {
   trackEvent,
 } from '../lib/supabase';
 import { useAdmin, usePrefs, useTrackView } from '../lib/context';
-import { RichTextView, docToMarkdown, ImageLightboxProvider } from '../lib/richtext';
+import { RichTextView, docToMarkdown, ImageLightboxProvider, useImageLightbox } from '../lib/richtext';
 import { RichEditor } from '../components/Editor';
 
 function SourceLinks({ links }: { links: { label: string; url: string }[] }) {
@@ -25,17 +25,29 @@ function SourceLinks({ links }: { links: { label: string; url: string }[] }) {
   const visible = showAll ? links : links.slice(0, 3);
   return (
     <div className="source-links no-print">
-      <h4>উৎস / Sources</h4>
+      <h4>Sources</h4>
       <ul>
         {visible.map((l, i) => (
-          <li key={i}><a href={l.url} target="_blank" rel="noopener noreferrer">{l.label}</a></li>
+          <li key={i}><a href={l.url} target="_blank" rel="noopener noreferrer" className="rt-link">{l.label}</a></li>
         ))}
       </ul>
       {links.length > 3 && (
         <button className="link-btn" onClick={() => setShowAll((s) => !s)}>
-          {showAll ? 'কম দেখান / Show less' : `আরও দেখান / Show more (${links.length - 3})`}
+          {showAll ? 'Show less' : `Show more (${links.length - 3})`}
         </button>
       )}
+    </div>
+  );
+}
+
+function DetailImages({ urls }: { urls: string[] }) {
+  const openLightbox = useImageLightbox();
+  if (!urls.length) return null;
+  return (
+    <div className="detail-images no-print">
+      {urls.map((u, i) => (
+        <button key={i} onClick={() => openLightbox(u)}><img src={u} alt="" /></button>
+      ))}
     </div>
   );
 }
@@ -62,7 +74,7 @@ function CategoryAssign({ heading, onClose }: { heading: Heading; onClose: () =>
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>কালেকশনে যোগ করুন / Assign to collections</h3>
+        <h3>Assign to collections</h3>
         {cats.length === 0 && <p className="muted">No collections yet — create one from the Collections page.</p>}
         <div className="category-check-list">
           {cats.map((c) => (
@@ -123,16 +135,16 @@ function HeadingBlock({ heading, book, onChanged }: { heading: Heading; book: Bo
 
   return (
     <div id={heading.id} className="heading-block">
-      <div className="heading-controls no-print">
-        <button className="icon-link" title="Copy deep link" onClick={copyUrl}>{copied ? '✓ কপি হয়েছে' : '🔗'}</button>
+      <div className={`heading-controls no-print ${editing ? 'pinned' : ''}`}>
+        <button title="Copy deep link" onClick={copyUrl}>{copied ? '✓ Copied' : 'Link'}</button>
         <button className={`icon-bookmark ${isBookmarked(heading.id) ? 'active' : ''}`} title="Bookmark" onClick={() => toggleBookmark(heading.id)}>
-          {isBookmarked(heading.id) ? '★' : '☆'}
+          {isBookmarked(heading.id) ? '★ Bookmarked' : '☆ Bookmark'}
         </button>
-        <button className="icon-copy" title="Copy content + citation" onClick={copyContent}>⧉ Copy</button>
+        <button title="Copy content + citation" onClick={copyContent}>Copy</button>
         {heading.page_number != null && <span className="page-badge">p. {heading.page_number}</span>}
         {isAdmin && (
           <>
-            <button onClick={() => setEditing((e) => !e)}>{editing ? 'বন্ধ / Close' : 'Edit'}</button>
+            <button onClick={() => setEditing((e) => !e)}>{editing ? 'Close' : 'Edit'}</button>
             <button onClick={() => setAssigning(true)}>+ Collection</button>
             <button className="danger" onClick={remove}>Delete</button>
           </>
@@ -140,15 +152,15 @@ function HeadingBlock({ heading, book, onChanged }: { heading: Heading; book: Bo
       </div>
 
       {editing ? (
-        <div className="heading-editor">
+        <div className="inline-edit-block">
           <label>
-            পৃষ্ঠা নম্বর / Page number
+            Page number
             <input type="number" value={pageNumber} onChange={(e) => setPageNumber(e.target.value === '' ? '' : Number(e.target.value))} />
           </label>
           <RichEditor content={content} onChange={setContent} imagePathPrefix={`headings/${heading.id}`} autosaveKey={heading.id} />
           <div className="modal-actions">
             <button className="primary" onClick={save}>Save</button>
-            <button onClick={() => setEditing(false)}>Cancel</button>
+            <button className="secondary" onClick={() => setEditing(false)}>Cancel</button>
           </div>
         </div>
       ) : (
@@ -166,7 +178,7 @@ function AddHeading({ book, nextSortOrder, onAdded }: { book: Book; nextSortOrde
   const [pageNumber, setPageNumber] = useState<number | ''>('');
   const [content, setContent] = useState<any>({
     type: 'doc',
-    content: [{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: '' }] }],
+    content: [{ type: 'heading', attrs: { level: 1 }, content: [] }],
   });
 
   const add = async () => {
@@ -179,33 +191,32 @@ function AddHeading({ book, nextSortOrder, onAdded }: { book: Book; nextSortOrde
     });
     setOpen(false);
     setContent({ type: 'doc', content: [{ type: 'heading', attrs: { level: 1 }, content: [] }] });
+    setPageNumber('');
     onAdded();
   };
 
-  if (!open) return <button className="primary add-heading-btn no-print" onClick={() => setOpen(true)}>+ নতুন হেডিং / New heading</button>;
+  if (!open) return <button className="primary add-heading-btn no-print" onClick={() => setOpen(true)}>+ New heading</button>;
 
   return (
-    <div className="modal-backdrop" onClick={() => setOpen(false)}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>নতুন হেডিং / New heading</h3>
-        <label>
-          লেভেল / Level
-          <select value={level} onChange={(e) => setLevel(Number(e.target.value) as 1 | 2 | 3 | 4)}>
-            <option value={1}>H1</option>
-            <option value={2}>H2</option>
-            <option value={3}>H3</option>
-            <option value={4}>H4</option>
-          </select>
-        </label>
-        <label>
-          পৃষ্ঠা নম্বর / Page number
-          <input type="number" value={pageNumber} onChange={(e) => setPageNumber(e.target.value === '' ? '' : Number(e.target.value))} />
-        </label>
-        <RichEditor content={content} onChange={setContent} imagePathPrefix={`headings/new-${book.id}`} />
-        <div className="modal-actions">
-          <button className="primary" onClick={add}>Add heading</button>
-          <button onClick={() => setOpen(false)}>Cancel</button>
-        </div>
+    <div className="inline-edit-block no-print">
+      <h4>New heading</h4>
+      <label>
+        Level
+        <select value={level} onChange={(e) => setLevel(Number(e.target.value) as 1 | 2 | 3 | 4)}>
+          <option value={1}>H1</option>
+          <option value={2}>H2</option>
+          <option value={3}>H3</option>
+          <option value={4}>H4</option>
+        </select>
+      </label>
+      <label>
+        Page number
+        <input type="number" value={pageNumber} onChange={(e) => setPageNumber(e.target.value === '' ? '' : Number(e.target.value))} />
+      </label>
+      <RichEditor content={content} onChange={setContent} imagePathPrefix={`headings/new-${book.id}`} />
+      <div className="modal-actions">
+        <button className="primary" onClick={add}>Add heading</button>
+        <button className="secondary" onClick={() => setOpen(false)}>Cancel</button>
       </div>
     </div>
   );
@@ -267,15 +278,11 @@ export default function BookPage() {
           {book.cover_image_url && <img className="book-cover" src={book.cover_image_url} alt={book.title} />}
           <div className="book-meta">
             <h1>{book.title}</h1>
-            {book.author && <p className="meta-line">লেখক / Author: {book.author}</p>}
-            {book.publisher && <p className="meta-line">প্রকাশক / Publisher: {book.publisher}</p>}
-            {book.base_language && <p className="meta-line">ভাষা / Language: {book.base_language}</p>}
+            {book.author && <p className="meta-line">Author: {book.author}</p>}
+            {book.publisher && <p className="meta-line">Publisher: {book.publisher}</p>}
+            {book.base_language && <p className="meta-line">Language: {book.base_language}</p>}
             <SourceLinks links={book.source_links || []} />
-            {book.detail_image_urls?.length > 0 && (
-              <div className="detail-images no-print">
-                {book.detail_image_urls.map((u, i) => <img key={i} src={u} alt="" />)}
-              </div>
-            )}
+            <DetailImages urls={book.detail_image_urls || []} />
           </div>
         </div>
 
@@ -295,7 +302,7 @@ export default function BookPage() {
 
         {/* Print-only citation/traceback page (FR-37) */}
         <div className="print-only print-citation-page">
-          <h2>উৎস / Source</h2>
+          <h2>Source</h2>
           <p>Printed from Sirājan Munīrā — {typeof window !== 'undefined' ? window.location.href : ''}</p>
           {book.source_links?.map((l, i) => <p key={i}>{l.label}: {l.url}</p>)}
         </div>

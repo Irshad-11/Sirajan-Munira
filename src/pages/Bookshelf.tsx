@@ -75,7 +75,7 @@ function BookForm({ initial, onSave, onCancel }: { initial: (Book & { source_lin
         const created = await createBook(bookFields);
         bookId = created.id;
       }
-      if (bookId) await replaceSourceLinks(bookId, form.source_links.filter((l) => l.label && l.url));
+      if (bookId) await replaceSourceLinks(bookId, source_links.filter((l) => l.label && l.url));
       onSave();
     } catch (e: any) {
       alert(e.message || 'Save failed');
@@ -85,68 +85,67 @@ function BookForm({ initial, onSave, onCancel }: { initial: (Book & { source_lin
   };
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal book-form" onClick={(e) => e.stopPropagation()}>
-        <h3>{initial ? 'বই সম্পাদনা / Edit Book' : 'নতুন বই / New Book'}</h3>
+    <div className="split-detail book-form">
+      <button className="link-btn detail-close" onClick={onCancel}>← Close</button>
+      <h3>{initial ? 'Edit book' : 'New book'}</h3>
 
-        <label>
-          কভার ছবি / Cover image (required)
-          <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadCover(e.target.files[0])} />
-        </label>
-        {form.cover_image_url && <img src={form.cover_image_url} alt="cover preview" className="cover-preview" />}
+      <label>
+        Cover image (required)
+        <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadCover(e.target.files[0])} />
+      </label>
+      {form.cover_image_url && <img src={form.cover_image_url} alt="cover preview" className="cover-preview" />}
 
-        <label>
-          শিরোনাম / Title *
-          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        </label>
-        <label>
-          লেখক / Author
-          <input value={form.author} onChange={(e) => setForm({ ...form, author: e.target.value })} />
-        </label>
-        <label>
-          প্রকাশক / Publisher
-          <input value={form.publisher} onChange={(e) => setForm({ ...form, publisher: e.target.value })} />
-        </label>
-        <label>
-          ভাষা / Base language
-          <input value={form.base_language} onChange={(e) => setForm({ ...form, base_language: e.target.value })} placeholder="Bangla / English / …" />
-        </label>
+      <label>
+        Title *
+        <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+      </label>
+      <label>
+        Author
+        <input value={form.author} onChange={(e) => setForm({ ...form, author: e.target.value })} />
+      </label>
+      <label>
+        Publisher
+        <input value={form.publisher} onChange={(e) => setForm({ ...form, publisher: e.target.value })} />
+      </label>
+      <label>
+        Base language
+        <input value={form.base_language} onChange={(e) => setForm({ ...form, base_language: e.target.value })} placeholder="Bangla / English / …" />
+      </label>
 
-        <label>
-          অতিরিক্ত ছবি / Detail images
-          <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadDetail(e.target.files[0])} />
-        </label>
-        <div className="detail-thumbs">
-          {form.detail_image_urls.map((u, i) => (
-            <div key={i} className="thumb">
-              <img src={u} alt="" />
-              <button onClick={() => setForm((f) => ({ ...f, detail_image_urls: f.detail_image_urls.filter((_, j) => j !== i) }))}>✕</button>
-            </div>
-          ))}
-        </div>
-
-        <label>বিবরণ / Description</label>
-        <RichEditor content={form.description} onChange={(doc) => setForm({ ...form, description: doc })} placeholder="বইয়ের বিবরণ লিখুন…" imagePathPrefix="book-description" />
-
-        <label>উৎস লিংক / Source links</label>
-        {form.source_links.map((l, i) => (
-          <div key={i} className="source-link-row">
-            <input placeholder="Label" value={l.label} onChange={(e) => { const arr = [...form.source_links]; arr[i] = { ...arr[i], label: e.target.value }; setForm({ ...form, source_links: arr }); }} />
-            <input placeholder="https://…" value={l.url} onChange={(e) => { const arr = [...form.source_links]; arr[i] = { ...arr[i], url: e.target.value }; setForm({ ...form, source_links: arr }); }} />
-            <button onClick={() => setForm({ ...form, source_links: form.source_links.filter((_, j) => j !== i) })}>✕</button>
+      <label>
+        Detail images
+        <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadDetail(e.target.files[0])} />
+      </label>
+      <div className="detail-thumbs">
+        {form.detail_image_urls.map((u, i) => (
+          <div key={i} className="thumb">
+            <img src={u} alt="" />
+            <button onClick={() => setForm((f) => ({ ...f, detail_image_urls: f.detail_image_urls.filter((_, j) => j !== i) }))}>✕</button>
           </div>
         ))}
-        <button className="secondary" onClick={() => setForm({ ...form, source_links: [...form.source_links, { label: '', url: '' }] })}>+ Add source link</button>
+      </div>
 
-        <label className="check">
-          <input type="checkbox" checked={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.checked })} />
-          পাবলিক / Visible to guests
-        </label>
+      <label>Description</label>
+      <RichEditor content={form.description} onChange={(doc) => setForm({ ...form, description: doc })} placeholder="Write a description…" imagePathPrefix="book-description" />
 
-        <div className="modal-actions">
-          <button className="primary" disabled={saving} onClick={save}>{saving ? 'সংরক্ষণ হচ্ছে…' : 'সংরক্ষণ / Save'}</button>
-          <button onClick={onCancel}>বাতিল / Cancel</button>
+      <label>Source links</label>
+      {form.source_links.map((l, i) => (
+        <div key={i} className="source-link-row">
+          <input placeholder="Label" value={l.label} onChange={(e) => { const arr = [...form.source_links]; arr[i] = { ...arr[i], label: e.target.value }; setForm({ ...form, source_links: arr }); }} />
+          <input placeholder="https://…" value={l.url} onChange={(e) => { const arr = [...form.source_links]; arr[i] = { ...arr[i], url: e.target.value }; setForm({ ...form, source_links: arr }); }} />
+          <button onClick={() => setForm({ ...form, source_links: form.source_links.filter((_, j) => j !== i) })}>✕</button>
         </div>
+      ))}
+      <button className="secondary" onClick={() => setForm({ ...form, source_links: [...form.source_links, { label: '', url: '' }] })}>+ Add source link</button>
+
+      <label className="check">
+        <input type="checkbox" checked={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.checked })} />
+        Visible to guests
+      </label>
+
+      <div className="modal-actions">
+        <button className="primary" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
+        <button className="secondary" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );
@@ -181,43 +180,48 @@ export default function Bookshelf() {
   return (
     <div className="page bookshelf-page">
       <div className="page-head">
-        <h1>বইঘর / Bookshelf</h1>
-        {isAdmin && <button className="primary" onClick={() => setEditing('new')}>+ নতুন বই / New book</button>}
+        <h1>Bookshelf</h1>
+        {isAdmin && <button className="primary" onClick={() => setEditing('new')}>+ New book</button>}
       </div>
 
-      {loading ? (
-        <p className="muted">Loading…</p>
-      ) : books.length === 0 ? (
-        <p className="muted">No books yet.</p>
-      ) : (
-        <div className="book-grid">
-          {books.map((b) => (
-            <div key={b.id} className={`book-card ${!b.visibility ? 'hidden-book' : ''}`}>
-              {!b.visibility && <span className="badge">Hidden</span>}
-              <Link to={`/book/${b.slug}`} className="book-cover-link">
-                {b.cover_image_url ? <img src={b.cover_image_url} alt={b.title} /> : <div className="cover-placeholder" />}
-              </Link>
-              <h3><Link to={`/book/${b.slug}`}>{b.title}</Link></h3>
-              {b.author && <p className="muted">{b.author}</p>}
-              {isAdmin && (
-                <div className="card-admin-actions">
-                  <button onClick={() => setEditing(b)}>Edit</button>
-                  <button onClick={() => toggleVisibility(b)}>{b.visibility ? 'Hide' : 'Show'}</button>
-                  <button className="danger" onClick={() => remove(b)}>Delete</button>
+      <div className={`split-view ${editing ? 'has-detail' : ''}`}>
+        <div className="split-list">
+          {loading ? (
+            <p className="muted">Loading…</p>
+          ) : books.length === 0 ? (
+            <p className="muted">No books yet.</p>
+          ) : (
+            <div className="row-list">
+              {books.map((b) => (
+                <div key={b.id} className={`book-card ${!b.visibility ? 'hidden-book' : ''}`}>
+                  <Link to={`/book/${b.slug}`} className="book-cover-link">
+                    {b.cover_image_url ? <img src={b.cover_image_url} alt={b.title} /> : <div className="cover-placeholder" />}
+                  </Link>
+                  <div className="row-body">
+                    <p className="row-title"><Link to={`/book/${b.slug}`}>{b.title}</Link>{!b.visibility && <span className="badge">Hidden</span>}</p>
+                    {b.author && <p className="row-meta">{b.author}</p>}
+                    {isAdmin && (
+                      <div className="card-admin-actions">
+                        <button onClick={() => setEditing(b)}>Edit</button>
+                        <button onClick={() => toggleVisibility(b)}>{b.visibility ? 'Hide' : 'Show'}</button>
+                        <button className="danger" onClick={() => remove(b)}>Delete</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
-          ))}
+          )}
         </div>
-      )}
 
-      {editing && (
-        <BookForm
-          initial={editing === 'new' ? null : editing}
-          onSave={() => { setEditing(null); reload(); }}
-          onCancel={() => setEditing(null)}
-        />
-      )}
+        {editing && (
+          <BookForm
+            initial={editing === 'new' ? null : editing}
+            onSave={() => { setEditing(null); reload(); }}
+            onCancel={() => setEditing(null)}
+          />
+        )}
+      </div>
     </div>
   );
 }
