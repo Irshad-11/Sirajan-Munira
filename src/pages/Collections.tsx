@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Plus, Pencil, Trash2, ExternalLink, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, ExternalLink, ChevronRight, Star } from 'lucide-react';
 import {
   Category,
   CategoryHeadingDetail,
@@ -19,13 +19,14 @@ function CategoryForm({ initial, onSave, onCancel }: { initial: Category | null;
   const [color, setColor] = useState(initial?.color || '#6b5b95');
   const [banner, setBanner] = useState(initial?.banner_image_url || '');
   const [description, setDescription] = useState(initial?.description || '');
+  const [featured, setFeatured] = useState(initial?.featured || false);
 
   const uploadBanner = async (file: File) => setBanner(await uploadImage(file, 'category-banners'));
 
   const save = async () => {
     if (!name.trim()) return alert('Name is required.');
-    if (initial) await updateCategory(initial.id, { name, color, banner_image_url: banner, description });
-    else await createCategory({ name, color, banner_image_url: banner, description });
+    if (initial) await updateCategory(initial.id, { name, color, banner_image_url: banner, description, featured });
+    else await createCategory({ name, color, banner_image_url: banner, description, featured });
     onSave();
   };
 
@@ -38,9 +39,39 @@ function CategoryForm({ initial, onSave, onCancel }: { initial: Category | null;
       <label>Banner image <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadBanner(e.target.files[0])} /></label>
       {banner && <img src={banner} alt="" className="cover-preview" />}
       <label>Description <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} /></label>
+      <label className="check">
+        <input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} />
+        Featured on Collections
+      </label>
       <div className="modal-actions">
         <button className="primary" onClick={save}>Save</button>
         <button className="secondary" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function FeaturedCollection({ category, isAdmin, onEdit, onToggleFeatured, onDelete }: {
+  category: Category; isAdmin: boolean; onEdit: () => void; onToggleFeatured: () => void; onDelete: () => void;
+}) {
+  return (
+    <div className="featured-card">
+      {category.banner_image_url ? (
+        <img src={category.banner_image_url} alt="" style={{ width: '100%', borderRadius: 6, aspectRatio: '4/3', objectFit: 'cover' }} />
+      ) : (
+        <div className="row-thumb-placeholder" style={{ width: '100%', height: '100%', minHeight: 140 }} />
+      )}
+      <div>
+        <p className="featured-label icon-row"><Star size={13} fill="currentColor" /> Featured collection</p>
+        <h2><span className="dot" style={{ background: category.color }} /> <Link to={`/collections/${category.id}`}>{category.name}</Link></h2>
+        {category.description && <p className="muted">{category.description}</p>}
+        {isAdmin && (
+          <div className="card-admin-actions">
+            <button onClick={onEdit}><Pencil size={13} /> Edit</button>
+            <button onClick={onToggleFeatured} title="Remove from featured"><Star size={13} fill="currentColor" /> Unfeature</button>
+            <button className="danger" onClick={onDelete}><Trash2 size={13} /> Delete</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -61,6 +92,14 @@ export function CollectionsList() {
     reload();
   };
 
+  const toggleFeatured = async (c: Category) => {
+    await updateCategory(c.id, { featured: !c.featured });
+    reload();
+  };
+
+  const featured = cats.find((c) => c.featured);
+  const rest = cats.filter((c) => c.id !== featured?.id);
+
   return (
     <div className="page">
       <div className="page-head">
@@ -71,8 +110,17 @@ export function CollectionsList() {
       <div className={`split-view ${editing ? 'has-detail' : ''}`}>
         <div className="split-list">
           {cats.length === 0 && <p className="muted">No collections yet.</p>}
+          {featured && (
+            <FeaturedCollection
+              category={featured}
+              isAdmin={isAdmin}
+              onEdit={() => setEditing(featured)}
+              onToggleFeatured={() => toggleFeatured(featured)}
+              onDelete={() => remove(featured)}
+            />
+          )}
           <div className="row-list">
-            {cats.map((c) => (
+            {rest.map((c) => (
               <div key={c.id} className="row-item">
                 {c.banner_image_url ? <img src={c.banner_image_url} alt="" className="row-thumb" /> : <div className="row-thumb-placeholder" />}
                 <div className="row-body">
@@ -84,6 +132,11 @@ export function CollectionsList() {
                   <div className="row-actions">
                     <Link to={`/collections/${c.id}`} className="link-btn icon-row"><ChevronRight size={13} /> Open</Link>
                     {isAdmin && <button className="link-btn icon-row" onClick={() => setEditing(c)}><Pencil size={13} /> Edit</button>}
+                    {isAdmin && (
+                      <button className="link-btn icon-row" onClick={() => toggleFeatured(c)} title="Make featured">
+                        <Star size={13} fill={c.featured ? 'currentColor' : 'none'} /> Feature
+                      </button>
+                    )}
                     {isAdmin && <button className="link-btn icon-row" onClick={() => remove(c)}><Trash2 size={13} /> Delete</button>}
                   </div>
                 </div>

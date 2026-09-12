@@ -161,7 +161,16 @@ function BookForm({ initial, onSave, onCancel }: { initial: (Book & { source_lin
   );
 }
 
-function FeaturedBook({ book }: { book: Book }) {
+function FeaturedBook({
+  book, isAdmin, onEdit, onToggleFeatured, onToggleVisibility, onDelete,
+}: {
+  book: Book;
+  isAdmin: boolean;
+  onEdit: () => void;
+  onToggleFeatured: () => void;
+  onToggleVisibility: () => void;
+  onDelete: () => void;
+}) {
   const openLightbox = useImageLightbox();
   const [stats, setStats] = useState<{ headingCount: number; viewCount: number } | null>(null);
   useEffect(() => { getBookStats(book.id).then(setStats); }, [book.id]);
@@ -181,6 +190,17 @@ function FeaturedBook({ book }: { book: Book }) {
           <span className="icon-row"><BookOpen size={15} /> <strong>{stats?.headingCount ?? '—'}</strong>&nbsp;findings</span>
           <span className="icon-row"><Users size={15} /> <strong>{stats?.viewCount ?? '—'}</strong>&nbsp;visits</span>
         </div>
+        {/* Previously the featured book was rendered without any admin
+            controls at all, so once a book was featured there was no way
+            to edit it, un-feature it, hide it, or delete it. */}
+        {isAdmin && (
+          <div className="card-admin-actions">
+            <button onClick={onEdit}><Pencil size={13} /> Edit</button>
+            <button onClick={onToggleFeatured} title="Remove from featured"><Star size={13} fill="currentColor" /> Unfeature</button>
+            <button onClick={onToggleVisibility}>{book.visibility ? <EyeOff size={13} /> : <Eye size={13} />} {book.visibility ? 'Hide' : 'Show'}</button>
+            <button className="danger" onClick={onDelete}><Trash2 size={13} /> Delete</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -204,6 +224,10 @@ export default function Bookshelf() {
 
   const toggleVisibility = async (b: Book) => {
     await updateBook(b.id, { visibility: !b.visibility });
+    reload();
+  };
+  const toggleFeatured = async (b: Book) => {
+    await updateBook(b.id, { featured: !b.featured });
     reload();
   };
   const remove = async (b: Book) => {
@@ -232,7 +256,14 @@ export default function Bookshelf() {
             <>
               {featured && (
                 <ImageLightboxProvider>
-                  <FeaturedBook book={featured} />
+                  <FeaturedBook
+                    book={featured}
+                    isAdmin={isAdmin}
+                    onEdit={() => setEditing(featured)}
+                    onToggleFeatured={() => toggleFeatured(featured)}
+                    onToggleVisibility={() => toggleVisibility(featured)}
+                    onDelete={() => remove(featured)}
+                  />
                 </ImageLightboxProvider>
               )}
               <div className="book-grid">
@@ -245,9 +276,12 @@ export default function Bookshelf() {
                     {b.author && <p className="row-meta muted">{b.author}</p>}
                     {isAdmin && (
                       <div className="card-admin-actions">
-                        <button onClick={() => setEditing(b)}><Pencil size={13} /></button>
-                        <button onClick={() => toggleVisibility(b)}>{b.visibility ? <EyeOff size={13} /> : <Eye size={13} />}</button>
-                        <button className="danger" onClick={() => remove(b)}><Trash2 size={13} /></button>
+                        <button onClick={() => setEditing(b)} title="Edit"><Pencil size={13} /></button>
+                        <button onClick={() => toggleFeatured(b)} title={b.featured ? 'Remove from featured' : 'Make featured'}>
+                          <Star size={13} fill={b.featured ? 'currentColor' : 'none'} />
+                        </button>
+                        <button onClick={() => toggleVisibility(b)} title={b.visibility ? 'Hide' : 'Show'}>{b.visibility ? <EyeOff size={13} /> : <Eye size={13} />}</button>
+                        <button className="danger" onClick={() => remove(b)} title="Delete"><Trash2 size={13} /></button>
                       </div>
                     )}
                   </div>

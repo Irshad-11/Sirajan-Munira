@@ -65,6 +65,7 @@ export interface Category {
   color: string;
   banner_image_url: string | null;
   description: string | null;
+  featured: boolean;
 }
 
 export interface CategoryHeadingRow {
@@ -277,6 +278,7 @@ export async function createCategory(c: Partial<Category>): Promise<Category> {
       color: c.color ?? '#6b5b95',
       banner_image_url: c.banner_image_url ?? null,
       description: c.description ?? null,
+      featured: c.featured ?? false,
     })
     .select()
     .single();

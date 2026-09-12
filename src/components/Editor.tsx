@@ -485,6 +485,25 @@ export function RichEditor({
     },
   });
 
+  // Keep the editor's live document in sync with the `content` prop whenever
+  // it changes for a reason OTHER than the editor's own onUpdate (e.g. the
+  // parent swapped to a different draft/heading, or content was reloaded
+  // from the server). Without this, TipTap only ever uses `content` for its
+  // *initial* value, so switching drafts/headings kept showing whatever was
+  // first loaded into this editor instance instead of the newly selected
+  // note's content.
+  useEffect(() => {
+    if (!editor) return;
+    const incoming = JSON.stringify(content || '');
+    const current = JSON.stringify(editor.getJSON());
+    if (incoming !== current) {
+      // `false` = don't emit an update event, so this doesn't loop back
+      // into onChange/autosave.
+      editor.commands.setContent(content || '', false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content, editor]);
+
   return (
     <div className="rich-editor">
       <Toolbar editor={editor} imagePathPrefix={imagePathPrefix} />

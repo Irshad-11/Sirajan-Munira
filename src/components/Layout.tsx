@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { Settings as SettingsIcon, LogIn, LogOut, Search as SearchIcon, X, Menu, Inbox } from 'lucide-react';
 import { useAdmin, usePrefs, THEMES } from '../lib/context';
@@ -30,7 +31,13 @@ function AdminLoginBox() {
     }
   };
 
-  return (
+  // Rendered via a portal straight into <body>: `.site-nav` is a fixed,
+  // transformed element (for the hide-on-scroll effect), which makes it the
+  // containing block for any `position: fixed` descendant. Left in place,
+  // this box (and the settings panel below) would be positioned relative to
+  // the ~60px-tall nav bar instead of the viewport, pinning them near the
+  // top of the page instead of where they're meant to sit.
+  return createPortal(
     <div className="admin-login-box">
       <button className="close-x" onClick={() => setLoginOpen(false)} aria-label="Close"><X size={14} /></button>
       <form onSubmit={submit}>
@@ -42,7 +49,8 @@ function AdminLoginBox() {
           {busy ? 'Signing in…' : 'Log in'}
         </button>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -53,7 +61,11 @@ function AdminLoginBox() {
 function SettingsPanel({ onClose }: { onClose: () => void }) {
   const { theme, setTheme, englishFont, setEnglishFont, copySettings, setCopySettings, clearLocalData, bookmarks } = usePrefs();
 
-  return (
+  // Also portaled to <body> for the same containing-block reason as
+  // AdminLoginBox above — otherwise this backdrop only covers the nav bar's
+  // own box instead of the full viewport, which cuts the panel off near the
+  // top of the screen.
+  return createPortal(
     <div className="settings-backdrop" onClick={onClose}>
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
         <div className="settings-head">
@@ -98,7 +110,8 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
           </button>
         </section>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

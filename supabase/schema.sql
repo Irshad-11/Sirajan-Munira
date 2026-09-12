@@ -76,8 +76,14 @@ create table if not exists categories (
   name text not null,
   color text not null default '#6b5b95',
   banner_image_url text,
-  description text
+  description text,
+  featured boolean not null default false
 );
+
+-- If this schema was applied before the `featured` column existed, add it
+-- without needing to drop/recreate the table (the `drop table` above only
+-- runs on a fresh install).
+alter table categories add column if not exists featured boolean not null default false;
 
 create table if not exists category_headings (
   category_id uuid not null references categories(id) on delete cascade,

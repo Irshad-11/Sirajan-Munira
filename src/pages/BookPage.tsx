@@ -277,8 +277,32 @@ export default function BookPage() {
   const [loading, setLoading] = useState(true);
   const [panel, setPanel] = useState<PanelState>(null);
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('sm_book_sidebar_collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
+
+  // Single toggle button drives both behaviours: on narrow screens it opens
+  // the mobile overlay; on desktop it collapses/expands the inline sidebar.
+  // Deciding this in JS (rather than showing two separate buttons and
+  // hiding one of them with CSS) means there's exactly one control and it
+  // always does the right thing for the current screen size.
+  const toggleSidebar = () => {
+    const isMobile = window.matchMedia('(max-width: 860px)').matches;
+    if (isMobile) {
+      setSidebarMobileOpen((v) => !v);
+    } else {
+      setSidebarCollapsed((v) => {
+        const next = !v;
+        try { localStorage.setItem('sm_book_sidebar_collapsed', next ? '1' : '0'); } catch { /* ignore */ }
+        return next;
+      });
+    }
+  };
   useTrackView('book', book?.id ?? null);
 
   const load = async () => {
@@ -370,18 +394,12 @@ export default function BookPage() {
           <div>
             <div className="icon-row" style={{ marginBottom: '0.6rem' }}>
               <button
-                className="book-sidebar-toggle icon-btn"
-                onClick={() => setSidebarMobileOpen(true)}
-              >
-                <PanelLeft size={16} /> Findings list
-              </button>
-              <button
                 className="icon-btn"
-                style={{ display: sidebarMobileOpen ? 'none' : undefined }}
-                onClick={() => setSidebarCollapsed((v) => !v)}
+                onClick={toggleSidebar}
                 title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
               >
                 <PanelLeft size={16} />
+                <span className="book-sidebar-toggle-label">Findings list</span>
               </button>
             </div>
 
