@@ -4,9 +4,9 @@ import { createClient, type Session } from '@supabase/supabase-js';
 // Client
 // ---------------------------------------------------------------------------
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-export const STORAGE_BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || 'sirajan-munira-media';
+const SUPABASE_URL = import.meta.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.SUPABASE_ANON_KEY;
+export const STORAGE_BUCKET = import.meta.env.SUPABASE_STORAGE_BUCKET || 'sirajan-munira-media';
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   // eslint-disable-next-line no-console
