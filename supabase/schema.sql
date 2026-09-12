@@ -3,15 +3,34 @@
 -- ============================================================================
 -- HOW TO USE:
 --   1. Open your Supabase project → SQL Editor → New query.
---   2. Paste this whole file and click "Run". Safe to re-run (uses
---      `create table if not exists` / `on conflict do nothing`).
+--   2. Paste this whole file and click "Run".
 --   3. Create your admin login: Authentication → Users → Add user
 --      (email + password). No signup flow exists in the app on purpose.
 --   4. Confirm a Storage bucket named exactly as VITE_SUPABASE_STORAGE_BUCKET
 --      in your .env (default: sirajan-munira-media) was created below.
+--
+-- NOTE: this script starts by dropping the app's own tables (if they exist)
+-- before recreating them. That makes it safe to re-run from a clean state
+-- even if an earlier attempt partially succeeded (e.g. left behind a table
+-- with a stale constraint). It does NOT touch anything outside these named
+-- tables, so other data in your project is untouched.
 -- ============================================================================
 
 create extension if not exists pgcrypto;
+
+-- ----------------------------------------------------------------------------
+-- Clean slate (safe to run even the first time — "if exists" no-ops then)
+-- ----------------------------------------------------------------------------
+
+drop table if exists category_headings cascade;
+drop table if exists messages cascade;
+drop table if exists analytics_events cascade;
+drop table if exists drafts cascade;
+drop table if exists draft_folders cascade;
+drop table if exists categories cascade;
+drop table if exists headings cascade;
+drop table if exists source_links cascade;
+drop table if exists books cascade;
 
 -- ----------------------------------------------------------------------------
 -- Tables
@@ -28,6 +47,7 @@ create table if not exists books (
   detail_image_urls jsonb not null default '[]'::jsonb,
   description jsonb,
   visibility boolean not null default true,
+  featured boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -45,7 +65,7 @@ create table if not exists headings (
   book_id uuid not null references books(id) on delete cascade,
   level int not null check (level between 1 and 4),
   content jsonb not null,
-  page_number int,
+  page_number text,
   sort_order int not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -68,7 +88,8 @@ create table if not exists category_headings (
 create table if not exists draft_folders (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  parent_folder_id uuid references draft_folders(id) on delete cascade
+  parent_folder_id uuid references draft_folders(id) on delete cascade,
+  sort_order int not null default 0
 );
 
 create table if not exists drafts (
@@ -76,6 +97,7 @@ create table if not exists drafts (
   folder_id uuid references draft_folders(id) on delete set null,
   title text not null default 'Untitled note',
   content jsonb,
+  sort_order int not null default 0,
   updated_at timestamptz not null default now()
 );
 
@@ -168,6 +190,9 @@ create policy "admin read/update messages" on messages for select using (auth.ro
 drop policy if exists "admin update messages" on messages;
 create policy "admin update messages" on messages for update using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
+drop policy if exists "admin delete messages" on messages;
+create policy "admin delete messages" on messages for delete using (auth.role() = 'authenticated');
+
 -- ----------------------------------------------------------------------------
 -- Storage bucket (public read, admin write via authenticated role)
 -- ----------------------------------------------------------------------------
@@ -249,7 +274,7 @@ insert into headings (id, book_id, level, content, page_number, sort_order) valu
     {"type":"paragraph","content":[{"type":"text","text":"The tin box was rusted shut, but the letters inside were dry — her brother had wrapped them in waxed paper decades before either of them knew the garden would outlive him."}]},
     {"type":"accordion","attrs":{"open":false,"title":"Excerpt from the third letter"},"content":[
       {"type":"paragraph","content":[{"type":"text","marks":[{"type":"italic"}],"text":"\"If you are reading this, the jasmine has probably taken over the north wall. Let it. Some things are allowed to be unruly.\""}]}
-    ]}}
+    ]}
  ]}'::jsonb, 34, 1),
 
 ('b0000000-0000-4000-8000-000000000103', 'a0000000-0000-4000-8000-000000000001', 2,

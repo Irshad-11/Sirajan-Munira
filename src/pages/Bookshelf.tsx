@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Pencil, Eye, EyeOff, Trash2, Plus, Star, BookOpen, Users } from 'lucide-react';
 import {
   Book,
   createBook,
   deleteBook,
+  getBookStats,
   listBooks,
   replaceSourceLinks,
   updateBook,
@@ -11,6 +13,7 @@ import {
 } from '../lib/supabase';
 import { useAdmin, useTrackView } from '../lib/context';
 import { RichEditor } from '../components/Editor';
+import { ImageCarousel, useImageLightbox, ImageLightboxProvider } from '../lib/richtext';
 
 interface BookFormState {
   title: string;
@@ -21,6 +24,7 @@ interface BookFormState {
   detail_image_urls: string[];
   description: any;
   visibility: boolean;
+  featured: boolean;
   source_links: { label: string; url: string }[];
 }
 
@@ -33,6 +37,7 @@ const EMPTY_FORM: BookFormState = {
   detail_image_urls: [],
   description: null,
   visibility: true,
+  featured: false,
   source_links: [],
 };
 
@@ -48,6 +53,7 @@ function BookForm({ initial, onSave, onCancel }: { initial: (Book & { source_lin
           detail_image_urls: initial.detail_image_urls || [],
           description: initial.description,
           visibility: initial.visibility,
+          featured: initial.featured || false,
           source_links: (initial.source_links || []).map((l: any) => ({ label: l.label, url: l.url })),
         }
       : EMPTY_FORM
@@ -142,10 +148,39 @@ function BookForm({ initial, onSave, onCancel }: { initial: (Book & { source_lin
         <input type="checkbox" checked={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.checked })} />
         Visible to guests
       </label>
+      <label className="check">
+        <input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} />
+        Featured on Bookshelf
+      </label>
 
       <div className="modal-actions">
         <button className="primary" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
         <button className="secondary" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function FeaturedBook({ book }: { book: Book }) {
+  const openLightbox = useImageLightbox();
+  const [stats, setStats] = useState<{ headingCount: number; viewCount: number } | null>(null);
+  useEffect(() => { getBookStats(book.id).then(setStats); }, [book.id]);
+
+  const images = [book.cover_image_url, ...(book.detail_image_urls || [])].filter(Boolean) as string[];
+
+  return (
+    <div className="featured-card">
+      <div className="featured-carousel">
+        <ImageCarousel images={images} onImageClick={openLightbox} />
+      </div>
+      <div>
+        <p className="featured-label icon-row"><Star size={13} fill="currentColor" /> Featured</p>
+        <h2><Link to={`/book/${book.slug}`}>{book.title}</Link></h2>
+        {book.author && <p className="muted">{book.author}</p>}
+        <div className="featured-stats">
+          <span className="icon-row"><BookOpen size={15} /> <strong>{stats?.headingCount ?? '—'}</strong>&nbsp;findings</span>
+          <span className="icon-row"><Users size={15} /> <strong>{stats?.viewCount ?? '—'}</strong>&nbsp;visits</span>
+        </div>
       </div>
     </div>
   );
@@ -177,11 +212,14 @@ export default function Bookshelf() {
     reload();
   };
 
+  const featured = books.find((b) => b.featured && b.visibility);
+  const rest = books.filter((b) => b.id !== featured?.id);
+
   return (
     <div className="page bookshelf-page">
       <div className="page-head">
         <h1>Bookshelf</h1>
-        {isAdmin && <button className="primary" onClick={() => setEditing('new')}>+ New book</button>}
+        {isAdmin && <button className="primary icon-row" onClick={() => setEditing('new')}><Plus size={16} /> New book</button>}
       </div>
 
       <div className={`split-view ${editing ? 'has-detail' : ''}`}>
@@ -191,26 +229,31 @@ export default function Bookshelf() {
           ) : books.length === 0 ? (
             <p className="muted">No books yet.</p>
           ) : (
-            <div className="row-list">
-              {books.map((b) => (
-                <div key={b.id} className={`book-card ${!b.visibility ? 'hidden-book' : ''}`}>
-                  <Link to={`/book/${b.slug}`} className="book-cover-link">
-                    {b.cover_image_url ? <img src={b.cover_image_url} alt={b.title} /> : <div className="cover-placeholder" />}
-                  </Link>
-                  <div className="row-body">
+            <>
+              {featured && (
+                <ImageLightboxProvider>
+                  <FeaturedBook book={featured} />
+                </ImageLightboxProvider>
+              )}
+              <div className="book-grid">
+                {rest.map((b) => (
+                  <div key={b.id} className={`book-grid-card ${!b.visibility ? 'hidden-book' : ''}`}>
+                    <Link to={`/book/${b.slug}`}>
+                      {b.cover_image_url ? <img src={b.cover_image_url} alt={b.title} /> : <div className="cover-placeholder" />}
+                    </Link>
                     <p className="row-title"><Link to={`/book/${b.slug}`}>{b.title}</Link>{!b.visibility && <span className="badge">Hidden</span>}</p>
-                    {b.author && <p className="row-meta">{b.author}</p>}
+                    {b.author && <p className="row-meta muted">{b.author}</p>}
                     {isAdmin && (
                       <div className="card-admin-actions">
-                        <button onClick={() => setEditing(b)}>Edit</button>
-                        <button onClick={() => toggleVisibility(b)}>{b.visibility ? 'Hide' : 'Show'}</button>
-                        <button className="danger" onClick={() => remove(b)}>Delete</button>
+                        <button onClick={() => setEditing(b)}><Pencil size={13} /></button>
+                        <button onClick={() => toggleVisibility(b)}>{b.visibility ? <EyeOff size={13} /> : <Eye size={13} />}</button>
+                        <button className="danger" onClick={() => remove(b)}><Trash2 size={13} /></button>
                       </div>
                     )}
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
 

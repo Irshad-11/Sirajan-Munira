@@ -8,6 +8,10 @@ import Color from '@tiptap/extension-color';
 import Link from '@tiptap/extension-link';
 import HorizontalRule from '@tiptap/extension-horizontal-rule';
 import Placeholder from '@tiptap/extension-placeholder';
+import {
+  Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon,
+  List, ListOrdered, Quote, Minus, Link2, Image as ImageIcon, ChevronsDownUp,
+} from 'lucide-react';
 import type { RichDoc } from '../lib/supabase';
 import { uploadImage } from '../lib/supabase';
 
@@ -164,10 +168,17 @@ function AnnotatedImageView({ node, updateAttributes }: any) {
     out.width = strokes.width;
     out.height = strokes.height;
     const ctx = out.getContext('2d')!;
-    ctx.drawImage(img, 0, 0, out.width, out.height);
-    ctx.drawImage(strokes, 0, 0);
-    updateAttributes({ annotationSrc: out.toDataURL('image/png') });
-    setAnnotating(false);
+    try {
+      ctx.drawImage(img, 0, 0, out.width, out.height);
+      ctx.drawImage(strokes, 0, 0);
+      updateAttributes({ annotationSrc: out.toDataURL('image/png') });
+      setAnnotating(false);
+    } catch (err) {
+      alert(
+        'Could not save the annotation: the image failed a cross-origin security check. ' +
+        'Make sure your Supabase Storage bucket is set to Public (Storage → your bucket → Public), then try again.'
+      );
+    }
   };
 
   const clearAnnotation = () => updateAttributes({ annotationSrc: null });
@@ -177,7 +188,7 @@ function AnnotatedImageView({ node, updateAttributes }: any) {
 
   return (
     <NodeViewWrapper className={`rt-image-node rt-image-${node.attrs.size}`} contentEditable={false}>
-      <img src={displaySrc} alt={node.attrs.alt || ''} className="rt-image-preview" />
+      <img src={displaySrc} alt={node.attrs.alt || ''} className="rt-image-preview" crossOrigin="anonymous" />
       <div className="rt-image-toolbar">
         <div className="size-group">
           {(['small', 'medium', 'large'] as const).map((s) => (
@@ -205,7 +216,7 @@ function AnnotatedImageView({ node, updateAttributes }: any) {
               <button onClick={() => setAnnotating(false)}>Cancel</button>
             </div>
             <div className="annotate-canvas-wrap">
-              <img ref={imgRef} src={node.attrs.src} alt="" onLoad={sizeCanvasToImage} />
+              <img ref={imgRef} src={node.attrs.src} alt="" crossOrigin="anonymous" onLoad={sizeCanvasToImage} />
               <canvas
                 ref={canvasRef}
                 onPointerDown={pointerDown}
@@ -341,9 +352,9 @@ function Toolbar({ editor, imagePathPrefix }: { editor: any; imagePathPrefix: st
         <option value="h4">Heading 4</option>
       </select>
 
-      <button className={btn(editor.isActive('bold'))} onClick={() => editor.chain().focus().toggleBold().run()}><b>B</b></button>
-      <button className={btn(editor.isActive('italic'))} onClick={() => editor.chain().focus().toggleItalic().run()}><i>I</i></button>
-      <button className={btn(editor.isActive('underline'))} onClick={() => editor.chain().focus().toggleUnderline().run()}><u>U</u></button>
+      <button className={btn(editor.isActive('bold'))} title="Bold" onClick={() => editor.chain().focus().toggleBold().run()}><BoldIcon /></button>
+      <button className={btn(editor.isActive('italic'))} title="Italic" onClick={() => editor.chain().focus().toggleItalic().run()}><ItalicIcon /></button>
+      <button className={btn(editor.isActive('underline'))} title="Underline" onClick={() => editor.chain().focus().toggleUnderline().run()}><UnderlineIcon /></button>
 
       <div className="swatch-group" title="Highlight">
         {HIGHLIGHT_COLORS.map((c) => (
@@ -377,16 +388,19 @@ function Toolbar({ editor, imagePathPrefix }: { editor: any; imagePathPrefix: st
         ))}
       </select>
 
-      <button className={btn(editor.isActive('bulletList'))} onClick={() => editor.chain().focus().toggleBulletList().run()}>• List</button>
-      <button className={btn(editor.isActive('orderedList'))} onClick={() => editor.chain().focus().toggleOrderedList().run()}>1. List</button>
-      <button className={btn(editor.isActive('blockquote'))} onClick={() => editor.chain().focus().toggleBlockquote().run()}>Quote</button>
-      <button onClick={() => editor.chain().focus().setHorizontalRule().run()}>Rule</button>
+      <button className={btn(editor.isActive('bulletList'))} title="Bullet list" onClick={() => editor.chain().focus().toggleBulletList().run()}><List /></button>
+      <button className={btn(editor.isActive('orderedList'))} title="Numbered list" onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered /></button>
+      <button className={btn(editor.isActive('blockquote'))} title="Quote" onClick={() => editor.chain().focus().toggleBlockquote().run()}><Quote /></button>
+      <button title="Horizontal rule" onClick={() => editor.chain().focus().setHorizontalRule().run()}><Minus /></button>
 
-      <button onClick={() => setShowLink(true)}>Link</button>
-      <button onClick={() => editor.chain().focus().insertContent({ type: 'accordion', attrs: { open: true, title: 'Details' }, content: [{ type: 'paragraph' }] }).run()}>
-        Accordion
+      <button title="Link" onClick={() => setShowLink(true)}><Link2 /></button>
+      <button
+        title="Accordion"
+        onClick={() => editor.chain().focus().insertContent({ type: 'accordion', attrs: { open: true, title: 'Details' }, content: [{ type: 'paragraph' }] }).run()}
+      >
+        <ChevronsDownUp />
       </button>
-      <button onClick={() => fileRef.current?.click()}>Image</button>
+      <button title="Image" onClick={() => fileRef.current?.click()}><ImageIcon /></button>
       <input
         ref={fileRef}
         type="file"

@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
+  Link2, Bookmark, Copy, Pencil, FolderPlus, Trash2, Check, ChevronDown, ChevronRight,
+  Plus, PanelLeft, X, ListTree,
+} from 'lucide-react';
+import {
   Book,
   Category,
   Heading,
@@ -16,8 +20,13 @@ import {
   trackEvent,
 } from '../lib/supabase';
 import { useAdmin, usePrefs, useTrackView } from '../lib/context';
-import { RichTextView, docToMarkdown, ImageLightboxProvider, useImageLightbox } from '../lib/richtext';
+import {
+  RichTextView, docToMarkdown, docToPlainText, firstLineOf, ImageLightboxProvider, useImageLightbox,
+  copyToClipboard, ImageCarousel,
+} from '../lib/richtext';
 import { RichEditor } from '../components/Editor';
+
+const LONG_CONTENT_THRESHOLD = 500;
 
 function SourceLinks({ links }: { links: { label: string; url: string }[] }) {
   const [showAll, setShowAll] = useState(false);
@@ -36,18 +45,6 @@ function SourceLinks({ links }: { links: { label: string; url: string }[] }) {
           {showAll ? 'Show less' : `Show more (${links.length - 3})`}
         </button>
       )}
-    </div>
-  );
-}
-
-function DetailImages({ urls }: { urls: string[] }) {
-  const openLightbox = useImageLightbox();
-  if (!urls.length) return null;
-  return (
-    <div className="detail-images no-print">
-      {urls.map((u, i) => (
-        <button key={i} onClick={() => openLightbox(u)}><img src={u} alt="" /></button>
-      ))}
     </div>
   );
 }
@@ -92,39 +89,43 @@ function CategoryAssign({ heading, onClose }: { heading: Heading; onClose: () =>
   );
 }
 
-function HeadingBlock({ heading, book, onChanged }: { heading: Heading; book: Book; onChanged: () => void }) {
+type PanelState = { mode: 'add' } | { mode: 'edit'; heading: Heading } | null;
+
+function HeadingBlock({
+  heading, book, open, panelOpen, onToggleOpen, onChanged, onEditRequest,
+}: {
+  heading: Heading; book: Book; open: boolean; panelOpen: boolean;
+  onToggleOpen: () => void; onChanged: () => void; onEditRequest: (h: Heading) => void;
+}) {
   const { isAdmin } = useAdmin();
   const { toggleBookmark, isBookmarked, copySettings } = usePrefs();
-  const [editing, setEditing] = useState(false);
-  const [content, setContent] = useState(heading.content);
-  const [pageNumber, setPageNumber] = useState<number | ''>(heading.page_number ?? '');
+  const [readMore, setReadMore] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const copyUrl = () => {
-    const url = `${window.location.origin}/book/${book.slug}#${heading.id}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
+  const plain = useMemo(() => docToPlainText(heading.content), [heading.content]);
+  const isLong = plain.length > LONG_CONTENT_THRESHOLD;
+  const permalink = `${window.location.origin}/book/${book.slug}#${heading.id}`;
+
+  const copyUrl = async () => {
+    const ok = await copyToClipboard(permalink);
+    if (!ok) window.prompt('Copy this link:', permalink);
+    else { setCopied(true); setTimeout(() => setCopied(false), 1500); }
     trackEvent('interact', 'heading', heading.id);
-    setTimeout(() => setCopied(false), 1500);
   };
 
-  const copyContent = () => {
+  const copyContent = async () => {
+    const externalSource = book.source_links?.[0]?.url;
     const parts: Record<string, string> = {
       content: docToMarkdown(heading.content),
       title: copySettings.includeBookTitle ? `— ${book.title}` : '',
-      page: copySettings.includePageNumber && heading.page_number ? `p. ${heading.page_number}` : '',
-      source: copySettings.includeSourceLink && book.source_links?.[0] ? book.source_links[0].url : '',
+      page: copySettings.includePageNumber && heading.page_number ? `Page ${heading.page_number}` : '',
+      source: copySettings.includeSourceLink ? (externalSource || permalink) : '',
     };
     const text = copySettings.order.map((k) => parts[k]).filter(Boolean).join('\n');
-    navigator.clipboard.writeText(text);
+    const ok = await copyToClipboard(text);
+    if (!ok) window.prompt('Copy this text:', text);
     trackEvent('interact', 'heading', heading.id);
-  };
-
-  const save = async () => {
-    await updateHeading(heading.id, { content, page_number: pageNumber === '' ? null : Number(pageNumber) });
-    setEditing(false);
-    onChanged();
   };
 
   const remove = async () => {
@@ -135,36 +136,39 @@ function HeadingBlock({ heading, book, onChanged }: { heading: Heading; book: Bo
 
   return (
     <div id={heading.id} className="heading-block">
-      <div className={`heading-controls no-print ${editing ? 'pinned' : ''}`}>
-        <button title="Copy deep link" onClick={copyUrl}>{copied ? '✓ Copied' : 'Link'}</button>
-        <button className={`icon-bookmark ${isBookmarked(heading.id) ? 'active' : ''}`} title="Bookmark" onClick={() => toggleBookmark(heading.id)}>
-          {isBookmarked(heading.id) ? '★ Bookmarked' : '☆ Bookmark'}
+      <div className={`heading-controls no-print ${panelOpen ? 'pinned' : ''}`}>
+        <button className="heading-collapse-toggle" title={open ? 'Collapse' : 'Expand'} onClick={onToggleOpen}>
+          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </button>
-        <button title="Copy content + citation" onClick={copyContent}>Copy</button>
-        {heading.page_number != null && <span className="page-badge">p. {heading.page_number}</span>}
+        <button title="Copy link to this finding" onClick={copyUrl}>{copied ? <Check size={15} /> : <Link2 size={15} />} {copied ? 'Copied' : 'Link'}</button>
+        <button className={`icon-bookmark ${isBookmarked(heading.id) ? 'active' : ''}`} title="Bookmark" onClick={() => toggleBookmark(heading.id)}>
+          <Bookmark size={15} fill={isBookmarked(heading.id) ? 'currentColor' : 'none'} /> {isBookmarked(heading.id) ? 'Saved' : 'Bookmark'}
+        </button>
+        <button title="Copy content + citation" onClick={copyContent}><Copy size={15} /> Copy</button>
         {isAdmin && (
           <>
-            <button onClick={() => setEditing((e) => !e)}>{editing ? 'Close' : 'Edit'}</button>
-            <button onClick={() => setAssigning(true)}>+ Collection</button>
-            <button className="danger" onClick={remove}>Delete</button>
+            <button onClick={() => onEditRequest(heading)}><Pencil size={15} /> Edit</button>
+            <button onClick={() => setAssigning(true)}><FolderPlus size={15} /> Collection</button>
+            <button className="danger" onClick={remove}><Trash2 size={15} /> Delete</button>
           </>
         )}
       </div>
 
-      {editing ? (
-        <div className="inline-edit-block">
-          <label>
-            Page number
-            <input type="number" value={pageNumber} onChange={(e) => setPageNumber(e.target.value === '' ? '' : Number(e.target.value))} />
-          </label>
-          <RichEditor content={content} onChange={setContent} imagePathPrefix={`headings/${heading.id}`} autosaveKey={heading.id} />
-          <div className="modal-actions">
-            <button className="primary" onClick={save}>Save</button>
-            <button className="secondary" onClick={() => setEditing(false)}>Cancel</button>
+      {heading.page_number && <p className="heading-page-label">Page {heading.page_number}</p>}
+
+      {open ? (
+        <>
+          <div className={`rt-clip ${isLong && !readMore ? 'clipped' : ''}`}>
+            <RichTextView doc={heading.content} />
           </div>
-        </div>
+          {isLong && (
+            <button className="link-btn read-more-btn" onClick={() => setReadMore((v) => !v)}>
+              {readMore ? 'Read less' : 'Read more'}
+            </button>
+          )}
+        </>
       ) : (
-        <RichTextView doc={heading.content} />
+        <p className="heading-collapsed-preview">{firstLineOf(heading.content, 140)}</p>
       )}
 
       {assigning && <CategoryAssign heading={heading} onClose={() => setAssigning(false)} />}
@@ -172,53 +176,96 @@ function HeadingBlock({ heading, book, onChanged }: { heading: Heading; book: Bo
   );
 }
 
-function AddHeading({ book, nextSortOrder, onAdded }: { book: Book; nextSortOrder: number; onAdded: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [level, setLevel] = useState<1 | 2 | 3 | 4>(1);
-  const [pageNumber, setPageNumber] = useState<number | ''>('');
-  const [content, setContent] = useState<any>({
-    type: 'doc',
-    content: [{ type: 'heading', attrs: { level: 1 }, content: [] }],
-  });
+function HeadingEditorPanel({ book, panel, nextSortOrder, onClose, onSaved }: {
+  book: Book; panel: PanelState; nextSortOrder: number; onClose: () => void; onSaved: () => void;
+}) {
+  const isEdit = panel?.mode === 'edit';
+  const [level, setLevel] = useState<1 | 2 | 3 | 4>(isEdit ? panel!.heading.level : 1);
+  const [pageNumber, setPageNumber] = useState(isEdit ? panel!.heading.page_number ?? '' : '');
+  const [content, setContent] = useState<any>(
+    isEdit
+      ? panel!.heading.content
+      : { type: 'doc', content: [{ type: 'heading', attrs: { level: 1 }, content: [] }] }
+  );
+  const [saving, setSaving] = useState(false);
 
-  const add = async () => {
-    await createHeading({
-      book_id: book.id,
-      level,
-      content,
-      page_number: pageNumber === '' ? null : Number(pageNumber),
-      sort_order: nextSortOrder,
-    });
-    setOpen(false);
-    setContent({ type: 'doc', content: [{ type: 'heading', attrs: { level: 1 }, content: [] }] });
-    setPageNumber('');
-    onAdded();
+  const save = async () => {
+    setSaving(true);
+    try {
+      if (isEdit) {
+        await updateHeading(panel!.heading.id, { content, page_number: pageNumber || null });
+      } else {
+        await createHeading({ book_id: book.id, level, content, page_number: pageNumber || null, sort_order: nextSortOrder });
+      }
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (!open) return <button className="primary add-heading-btn no-print" onClick={() => setOpen(true)}>+ New heading</button>;
-
   return (
-    <div className="inline-edit-block no-print">
-      <h4>New heading</h4>
-      <label>
-        Level
-        <select value={level} onChange={(e) => setLevel(Number(e.target.value) as 1 | 2 | 3 | 4)}>
-          <option value={1}>H1</option>
-          <option value={2}>H2</option>
-          <option value={3}>H3</option>
-          <option value={4}>H4</option>
-        </select>
-      </label>
+    <div className="split-detail">
+      <button className="link-btn detail-close" onClick={onClose}>← Close</button>
+      <h3>{isEdit ? 'Edit heading' : 'New heading'}</h3>
+      {!isEdit && (
+        <label>
+          Level
+          <select value={level} onChange={(e) => setLevel(Number(e.target.value) as 1 | 2 | 3 | 4)}>
+            <option value={1}>H1</option>
+            <option value={2}>H2</option>
+            <option value={3}>H3</option>
+            <option value={4}>H4</option>
+          </select>
+        </label>
+      )}
       <label>
         Page number
-        <input type="number" value={pageNumber} onChange={(e) => setPageNumber(e.target.value === '' ? '' : Number(e.target.value))} />
+        <input value={pageNumber} onChange={(e) => setPageNumber(e.target.value)} placeholder="e.g. 12 or 100-104" />
       </label>
-      <RichEditor content={content} onChange={setContent} imagePathPrefix={`headings/new-${book.id}`} />
+      <RichEditor content={content} onChange={setContent} imagePathPrefix={isEdit ? `headings/${panel!.heading.id}` : `headings/new-${book.id}`} autosaveKey={isEdit ? panel!.heading.id : undefined} />
       <div className="modal-actions">
-        <button className="primary" onClick={add}>Add heading</button>
-        <button className="secondary" onClick={() => setOpen(false)}>Cancel</button>
+        <button className="primary" disabled={saving} onClick={save}>{saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add heading'}</button>
+        <button className="secondary" onClick={onClose}>Cancel</button>
       </div>
     </div>
+  );
+}
+
+function BookSidebar({ headings, onJump, onCollapseAll, onExpandAll, mobileOpen, onCloseMobile }: {
+  headings: Heading[]; onJump: (id: string) => void; onCollapseAll: () => void; onExpandAll: () => void;
+  mobileOpen: boolean; onCloseMobile: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const filtered = query.trim()
+    ? headings.filter((h) => docToPlainText(h.content).toLowerCase().includes(query.trim().toLowerCase()))
+    : headings;
+
+  return (
+    <>
+      {mobileOpen && <div className="book-sidebar-backdrop" onClick={onCloseMobile} />}
+      <aside className="book-sidebar">
+        <div className="book-sidebar-head">
+          <strong className="icon-row"><ListTree size={15} /> Findings</strong>
+          <button className="icon-btn" onClick={onCloseMobile}><X size={16} /></button>
+        </div>
+        <div className="book-sidebar-search">
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search headings…" />
+          {query && <button className="link-btn" onClick={() => setQuery('')}>Clear</button>}
+        </div>
+        <div className="book-sidebar-actions">
+          <button className="link-btn" onClick={onExpandAll}>Expand all</button>
+          <button className="link-btn" onClick={onCollapseAll}>Collapse all</button>
+        </div>
+        <ul className="book-sidebar-list">
+          {filtered.map((h) => (
+            <li key={h.id}>
+              <button onClick={() => onJump(h.id)}>{firstLineOf(h.content, 70) || 'Untitled'}</button>
+            </li>
+          ))}
+          {filtered.length === 0 && <li className="muted" style={{ padding: '0.5rem 0' }}>No matches.</li>}
+        </ul>
+      </aside>
+    </>
   );
 }
 
@@ -228,6 +275,10 @@ export default function BookPage() {
   const [book, setBook] = useState<Book | null>(null);
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [loading, setLoading] = useState(true);
+  const [panel, setPanel] = useState<PanelState>(null);
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   useTrackView('book', book?.id ?? null);
 
   const load = async () => {
@@ -235,7 +286,15 @@ export default function BookPage() {
     setLoading(true);
     const b = await getBookBySlug(slug);
     setBook(b);
-    if (b) setHeadings(await listHeadings(b.id));
+    if (b) {
+      const hs = await listHeadings(b.id);
+      setHeadings(hs);
+      setOpenMap((prev) => {
+        const next = { ...prev };
+        hs.forEach((h) => { if (!(h.id in next)) next[h.id] = true; });
+        return next;
+      });
+    }
     setLoading(false);
   };
 
@@ -248,20 +307,28 @@ export default function BookPage() {
   useEffect(() => {
     if (loading || !window.location.hash) return;
     const id = decodeURIComponent(window.location.hash.slice(1));
-    const el = document.getElementById(id);
-    if (el) {
-      setTimeout(() => {
+    setTimeout(() => jumpTo(id), 150);
+  }, [loading, headings]);
+
+  const jumpTo = (id: string) => {
+    setOpenMap((prev) => ({ ...prev, [id]: true }));
+    setSidebarMobileOpen(false);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(id);
+      if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
         el.classList.add('deep-link-highlight');
         setTimeout(() => el.classList.remove('deep-link-highlight'), 2200);
-      }, 150);
-    }
-  }, [loading, headings]);
+      }
+    });
+  };
 
   const nextSortOrder = useMemo(() => (headings.length ? Math.max(...headings.map((h) => h.sort_order)) + 1 : 0), [headings]);
 
   if (loading) return <div className="page"><p className="muted">Loading…</p></div>;
   if (!book) return <div className="page"><p>Book not found.</p></div>;
+
+  const carouselImages = book.detail_image_urls || [];
 
   return (
     <ImageLightboxProvider>
@@ -282,23 +349,84 @@ export default function BookPage() {
             {book.publisher && <p className="meta-line">Publisher: {book.publisher}</p>}
             {book.base_language && <p className="meta-line">Language: {book.base_language}</p>}
             <SourceLinks links={book.source_links || []} />
-            <DetailImages urls={book.detail_image_urls || []} />
+            {carouselImages.length > 0 && (
+              <div className="no-print" style={{ marginTop: '0.7rem', maxWidth: 340 }}>
+                <ImageCarouselWrapper images={carouselImages} />
+              </div>
+            )}
           </div>
         </div>
 
-        {book.description && (
-          <div className="book-description">
-            <RichTextView doc={book.description} />
+        <div className={`book-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${sidebarMobileOpen ? 'sidebar-mobile-open' : ''} no-print`}>
+          <BookSidebar
+            headings={headings}
+            onJump={jumpTo}
+            onCollapseAll={() => setOpenMap(Object.fromEntries(headings.map((h) => [h.id, false])))}
+            onExpandAll={() => setOpenMap(Object.fromEntries(headings.map((h) => [h.id, true])))}
+            mobileOpen={sidebarMobileOpen}
+            onCloseMobile={() => setSidebarMobileOpen(false)}
+          />
+
+          <div>
+            <div className="icon-row" style={{ marginBottom: '0.6rem' }}>
+              <button
+                className="book-sidebar-toggle icon-btn"
+                onClick={() => setSidebarMobileOpen(true)}
+              >
+                <PanelLeft size={16} /> Findings list
+              </button>
+              <button
+                className="icon-btn"
+                style={{ display: sidebarMobileOpen ? 'none' : undefined }}
+                onClick={() => setSidebarCollapsed((v) => !v)}
+                title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+              >
+                <PanelLeft size={16} />
+              </button>
+            </div>
+
+            <div className={`split-view wide-detail ${panel ? 'has-detail' : ''}`}>
+              <div className="split-list reading-column">
+                {book.description && (
+                  <div className="book-description">
+                    <RichTextView doc={book.description} />
+                  </div>
+                )}
+
+                <div className="headings-list">
+                  {headings.map((h) => (
+                    <HeadingBlock
+                      key={h.id}
+                      heading={h}
+                      book={book}
+                      open={openMap[h.id] ?? true}
+                      panelOpen={panel?.mode === 'edit' && panel.heading.id === h.id}
+                      onToggleOpen={() => setOpenMap((prev) => ({ ...prev, [h.id]: !prev[h.id] }))}
+                      onChanged={load}
+                      onEditRequest={(heading) => setPanel({ mode: 'edit', heading })}
+                    />
+                  ))}
+                </div>
+
+                {isAdmin && !panel && (
+                  <button className="primary add-heading-btn no-print icon-row" onClick={() => setPanel({ mode: 'add' })}>
+                    <Plus size={16} /> New heading
+                  </button>
+                )}
+              </div>
+
+              {panel && (
+                <HeadingEditorPanel
+                  book={book}
+                  panel={panel}
+                  nextSortOrder={nextSortOrder}
+                  onClose={() => setPanel(null)}
+                  onSaved={() => { setPanel(null); load(); }}
+                />
+              )}
+            </div>
           </div>
-        )}
-
-        <div className="headings-list">
-          {headings.map((h) => (
-            <HeadingBlock key={h.id} heading={h} book={book} onChanged={load} />
-          ))}
         </div>
-
-        {isAdmin && <AddHeading book={book} nextSortOrder={nextSortOrder} onAdded={load} />}
 
         {/* Print-only citation/traceback page (FR-37) */}
         <div className="print-only print-citation-page">
@@ -309,4 +437,9 @@ export default function BookPage() {
       </div>
     </ImageLightboxProvider>
   );
+}
+
+function ImageCarouselWrapper({ images }: { images: string[] }) {
+  const openLightbox = useImageLightbox();
+  return <ImageCarousel images={images} onImageClick={openLightbox} />;
 }

@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Settings as SettingsIcon, LogIn, LogOut, Search as SearchIcon, X, Menu, Inbox } from 'lucide-react';
 import { useAdmin, usePrefs, THEMES } from '../lib/context';
+import { listMessages } from '../lib/supabase';
 
 export const SAFEENAH_URL = 'https://irshad-11.github.io/Safeenah/';
 
@@ -30,13 +32,13 @@ function AdminLoginBox() {
 
   return (
     <div className="admin-login-box">
-      <button className="close-x" onClick={() => setLoginOpen(false)} aria-label="Close">✕</button>
+      <button className="close-x" onClick={() => setLoginOpen(false)} aria-label="Close"><X size={14} /></button>
       <form onSubmit={submit}>
-        <h4>Admin login</h4>
+        <h4 className="icon-row"><LogIn size={16} /> Admin login</h4>
         <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         {error && <p className="form-error">{error}</p>}
-        <button type="submit" disabled={busy} className="primary">
+        <button type="submit" disabled={busy} className="primary full-width">
           {busy ? 'Signing in…' : 'Log in'}
         </button>
       </form>
@@ -55,8 +57,8 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
     <div className="settings-backdrop" onClick={onClose}>
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
         <div className="settings-head">
-          <h3>Settings</h3>
-          <button onClick={onClose}>✕</button>
+          <h3 className="icon-row"><SettingsIcon size={17} /> Settings</h3>
+          <button onClick={onClose}><X size={16} /></button>
         </div>
 
         <section>
@@ -107,37 +109,86 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
 export function NavBar() {
   const { isAdmin, setLoginOpen, logout } = useAdmin();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const [q, setQ] = useState('');
+  const [unread, setUnread] = useState(0);
+  const navRef = React.useRef<HTMLElement | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const load = () => listMessages().then((m) => setUnread(m.filter((x) => !x.read).length)).catch(() => {});
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, [isAdmin]);
+
+  // Measure actual nav height so page content (fixed nav) and the book
+  // sidebar can offset themselves correctly, including after wrapping on
+  // narrow screens or the admin-mode border adding a couple of pixels.
+  useEffect(() => {
+    const setHeightVar = () => {
+      if (navRef.current) document.documentElement.style.setProperty('--nav-height', `${navRef.current.offsetHeight}px`);
+    };
+    setHeightVar();
+    window.addEventListener('resize', setHeightVar);
+    return () => window.removeEventListener('resize', setHeightVar);
+  }, [menuOpen]);
+
+  // Hides on scroll-down, reappears on the slightest scroll-up — never
+  // fully gone, just out of the way while reading further down the page.
+  useEffect(() => {
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y > lastY && y > 80) setHidden(true);
+      else if (y < lastY) setHidden(false);
+      lastY = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (q.trim()) navigate(`/search?q=${encodeURIComponent(q.trim())}`);
+    setMenuOpen(false);
   };
 
   return (
-    <header className={`site-nav ${isAdmin ? 'admin-mode' : ''}`}>
-      <Link to="/" className="brand">
+    <header ref={navRef as any} className={`site-nav ${isAdmin ? 'admin-mode' : ''} ${hidden && !menuOpen ? 'nav-hidden' : ''}`}>
+      <Link to="/" className="brand" onClick={() => setMenuOpen(false)}>
         <span className="brand-main">Sirājan Munīrā</span>
         <span className="brand-sub">an imprint of Safeenah</span>
       </Link>
-      <nav>
-        <NavLink to="/books">Bookshelf</NavLink>
-        <NavLink to="/collections">Collections</NavLink>
-        {isAdmin && <NavLink to="/drafts">Drafts</NavLink>}
-        {isAdmin && <NavLink to="/analytics">Analytics</NavLink>}
-        <NavLink to="/about">About</NavLink>
-        <NavLink to="/contact">Contact</NavLink>
+
+      <button className="hamburger-btn icon-btn" onClick={() => setMenuOpen((v) => !v)} aria-label="Menu">
+        {menuOpen ? <X /> : <Menu />}
+      </button>
+
+      <nav className={menuOpen ? 'mobile-open' : ''}>
+        <NavLink to="/books" onClick={() => setMenuOpen(false)}>Bookshelf</NavLink>
+        <NavLink to="/collections" onClick={() => setMenuOpen(false)}>Collections</NavLink>
+        {isAdmin && <NavLink to="/drafts" onClick={() => setMenuOpen(false)}>Drafts</NavLink>}
+        {isAdmin && <NavLink to="/analytics" onClick={() => setMenuOpen(false)}>Analytics</NavLink>}
+        <NavLink to="/about" onClick={() => setMenuOpen(false)}>About</NavLink>
+        <NavLink to="/contact" onClick={() => setMenuOpen(false)}>
+          {isAdmin ? 'Inbox' : 'Contact'}
+          {isAdmin && unread > 0 && <span className="nav-dot" />}
+        </NavLink>
       </nav>
-      <form className="nav-search" onSubmit={submitSearch}>
+
+      <form className="nav-search icon-row" onSubmit={submitSearch}>
+        <SearchIcon size={14} className="muted" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" />
       </form>
       <div className="nav-actions">
-        <button onClick={() => setSettingsOpen(true)} title="Settings" className="icon-btn">Settings</button>
+        <button onClick={() => setSettingsOpen(true)} title="Settings" className="icon-btn"><SettingsIcon /></button>
         {isAdmin ? (
-          <button onClick={logout} className="icon-btn admin-tag">Admin — log out</button>
+          <button onClick={logout} title="Log out" className="icon-btn admin-tag"><LogOut /></button>
         ) : (
-          <button onClick={() => setLoginOpen(true)} className="icon-btn">Admin login</button>
+          <button onClick={() => setLoginOpen(true)} title="Admin login" className="icon-btn"><LogIn /></button>
         )}
       </div>
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
@@ -150,32 +201,26 @@ export function SiteFooter() {
   return (
     <footer className="site-footer">
       <div className="footer-cols">
-        <div>
-          <h5>Sirājan Munīrā</h5>
-          <p className="muted">
-            An imprint of <a href={SAFEENAH_URL} target="_blank" rel="noopener noreferrer">Safeenah</a> — a book-annotation
-            and knowledge-archiving project.
-          </p>
-        </div>
-        <div>
-          <h5>Navigate</h5>
+        <span className="footer-brand">
+          Sirājan Munīrā — an imprint of <a href={SAFEENAH_URL} target="_blank" rel="noopener noreferrer">Safeenah</a>
+        </span>
+        <nav>
           <Link to="/books">Bookshelf</Link>
           <Link to="/collections">Collections</Link>
           <Link to="/about">About</Link>
-        </div>
-        <div>
-          <h5>Contact</h5>
-          <Link to="/contact">Send a message</Link>
-          <span className="muted">© {new Date().getFullYear()} Safeenah.</span>
-        </div>
+          <Link to="/contact">Contact</Link>
+        </nav>
+        <span>© {new Date().getFullYear()}</span>
       </div>
     </footer>
   );
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const { isAdmin } = useAdmin();
   return (
     <div className="app-shell">
+      {isAdmin && <div className="admin-edge-bar" title="Admin privilege active" />}
       <NavBar />
       <main>{children}</main>
       <SiteFooter />

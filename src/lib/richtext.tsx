@@ -2,6 +2,36 @@ import React, { useState } from 'react';
 import type { RichDoc } from './supabase';
 
 // ---------------------------------------------------------------------------
+// Clipboard — with a fallback for browsers/contexts where the async
+// Clipboard API is unavailable or blocked (non-HTTPS, missing permission).
+// ---------------------------------------------------------------------------
+
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    throw new Error('clipboard api unavailable');
+  } catch {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Plain text / markdown extraction (FR-21, FR-26)
 // ---------------------------------------------------------------------------
 
@@ -16,6 +46,14 @@ export function docToPlainText(doc: RichDoc): string {
   };
   walk(doc);
   return out.replace(/\s+/g, ' ').trim();
+}
+
+// First line/sentence only — used for collapsed heading previews and the
+// book-page sidebar list, so a reader can tell headings apart at a glance.
+export function firstLineOf(doc: RichDoc, maxLen = 90): string {
+  const text = docToPlainText(doc);
+  const cut = text.split(/(?<=[.!?।])\s/)[0] || text;
+  return cut.length > maxLen ? `${cut.slice(0, maxLen).trim()}…` : cut;
 }
 
 function marksToMd(text: string, marks: any[] = []): string {
@@ -201,6 +239,58 @@ export function RichTextView({ doc, className }: { doc: RichDoc; className?: str
   return (
     <div className={`rt-content ${className || ''}`}>
       <Node node={doc} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Auto-advancing image carousel — used for a book's extra detail images and
+// for the featured-book card. Center image full size, neighbours peeking at
+// the edges; advances on its own and eases between slides.
+// ---------------------------------------------------------------------------
+
+export function ImageCarousel({ images, onImageClick, intervalMs = 3500 }: { images: string[]; onImageClick?: (src: string) => void; intervalMs?: number }) {
+  const [index, setIndex] = useState(0);
+
+  React.useEffect(() => {
+    if (images.length <= 1) return;
+    const t = setInterval(() => setIndex((i) => (i + 1) % images.length), intervalMs);
+    return () => clearInterval(t);
+  }, [images.length, intervalMs]);
+
+  if (images.length === 0) return null;
+  if (images.length === 1) {
+    return (
+      <button className="carousel-single" onClick={() => onImageClick?.(images[0])}>
+        <img src={images[0]} alt="" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="carousel">
+      <div className="carousel-track">
+        {images.map((src, i) => {
+          const offset = i - index;
+          const wrapped = offset > images.length / 2 ? offset - images.length : offset < -images.length / 2 ? offset + images.length : offset;
+          const isCenter = wrapped === 0;
+          return (
+            <button
+              key={src + i}
+              className={`carousel-slide ${isCenter ? 'center' : 'peek'}`}
+              style={{ transform: `translateX(${wrapped * 62}%) scale(${isCenter ? 1 : 0.8})`, zIndex: isCenter ? 2 : 1, opacity: Math.abs(wrapped) > 1 ? 0 : 1 }}
+              onClick={() => (isCenter ? onImageClick?.(src) : setIndex(i))}
+            >
+              <img src={src} alt="" />
+            </button>
+          );
+        })}
+      </div>
+      <div className="carousel-dots">
+        {images.map((_, i) => (
+          <button key={i} className={`carousel-dot ${i === index ? 'active' : ''}`} onClick={() => setIndex(i)} />
+        ))}
+      </div>
     </div>
   );
 }

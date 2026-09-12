@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { MessageRow, listMessages, markMessageRead, submitMessage } from '../lib/supabase';
+import { Send, Inbox as InboxIcon, Trash2 } from 'lucide-react';
+import { MessageRow, deleteMessage, listMessages, markMessageRead, submitMessage } from '../lib/supabase';
 import { useAdmin, useTrackView } from '../lib/context';
 import { SAFEENAH_URL } from '../components/Layout';
 
@@ -97,8 +98,8 @@ export function ContactForm({ compact }: { compact?: boolean }) {
         {method === 'email' ? 'Email address' : method === 'whatsapp' ? 'WhatsApp number' : 'Contact detail'}
         <input value={value} onChange={(e) => setValue(e.target.value)} required />
       </label>
-      <button className="primary" disabled={busy} type="submit" style={{ alignSelf: 'flex-start' }}>
-        {busy ? 'Sending…' : 'Send message'}
+      <button className="primary icon-row" disabled={busy} type="submit" style={{ alignSelf: 'flex-start' }}>
+        <Send size={15} /> {busy ? 'Sending…' : 'Send message'}
       </button>
     </form>
   );
@@ -114,16 +115,25 @@ function AdminInbox() {
     reload();
   };
 
+  const remove = async (m: MessageRow) => {
+    if (!confirm(`Delete message from "${m.guest_name}"?`)) return;
+    await deleteMessage(m.id);
+    reload();
+  };
+
   return (
     <div className="admin-inbox">
-      <h3>Inbox ({messages.filter((m) => !m.read).length} unread)</h3>
+      <h3>{messages.filter((m) => !m.read).length} unread of {messages.length}</h3>
       <ul>
         {messages.map((m) => (
           <li key={m.id} className={m.read ? 'read' : 'unread'}>
             <div className="inbox-row-head">
               <strong>{m.guest_name}</strong>
               <span className="muted">{new Date(m.created_at).toLocaleString()}</span>
-              <button className="tiny" onClick={() => toggle(m)}>{m.read ? 'Mark unread' : 'Mark read'}</button>
+              <span className="inbox-row-actions">
+                <button className="tiny" onClick={() => toggle(m)}>{m.read ? 'Mark unread' : 'Mark read'}</button>
+                <button className="tiny danger" onClick={() => remove(m)}><Trash2 size={12} /> Delete</button>
+              </span>
             </div>
             <p>{m.message}</p>
             <p className="muted">via {m.contact_method}: {m.contact_value}</p>
@@ -140,10 +150,19 @@ export function ContactPage() {
   useTrackView('site', 'contact');
   return (
     <div className="page contact-page">
-      <h1>Contact</h1>
-      <p className="muted">Have a correction, a book suggestion, or a question? Send a message below.</p>
-      <ContactForm />
-      {isAdmin && <AdminInbox />}
+      {isAdmin ? (
+        <>
+          <h1 className="icon-row"><InboxIcon size={22} /> Inbox</h1>
+          <p className="muted">Messages sent through the public Contact form.</p>
+          <AdminInbox />
+        </>
+      ) : (
+        <>
+          <h1>Contact</h1>
+          <p className="muted">Have a correction, a book suggestion, or a question? Send a message below.</p>
+          <ContactForm />
+        </>
+      )}
     </div>
   );
 }

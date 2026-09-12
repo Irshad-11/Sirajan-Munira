@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Plus, Pencil, Trash2, ExternalLink, ChevronRight } from 'lucide-react';
 import {
   Category,
   CategoryHeadingDetail,
@@ -64,7 +65,7 @@ export function CollectionsList() {
     <div className="page">
       <div className="page-head">
         <h1>Collections</h1>
-        {isAdmin && <button className="primary" onClick={() => setEditing('new')}>+ New collection</button>}
+        {isAdmin && <button className="primary icon-row" onClick={() => setEditing('new')}><Plus size={16} /> New collection</button>}
       </div>
 
       <div className={`split-view ${editing ? 'has-detail' : ''}`}>
@@ -81,9 +82,9 @@ export function CollectionsList() {
                   </p>
                   {c.description && <p className="row-excerpt">{c.description}</p>}
                   <div className="row-actions">
-                    <Link to={`/collections/${c.id}`} className="link-btn">Open</Link>
-                    {isAdmin && <button className="link-btn" onClick={() => setEditing(c)}>Edit</button>}
-                    {isAdmin && <button className="link-btn" onClick={() => remove(c)}>Delete</button>}
+                    <Link to={`/collections/${c.id}`} className="link-btn icon-row"><ChevronRight size={13} /> Open</Link>
+                    {isAdmin && <button className="link-btn icon-row" onClick={() => setEditing(c)}><Pencil size={13} /> Edit</button>}
+                    {isAdmin && <button className="link-btn icon-row" onClick={() => remove(c)}><Trash2 size={13} /> Delete</button>}
                   </div>
                 </div>
               </div>
@@ -143,8 +144,8 @@ export function CategoryDetail() {
                         {expanded ? 'less' : 'read more'}
                       </button>
                     )}
-                    <button className="link-btn" onClick={(e) => { e.stopPropagation(); setSelected({ heading, book }); }}>Open</button>
-                    <Link className="link-btn" to={`/book/${book.slug}#${heading.id}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Open new tab ↗</Link>
+                    <button className="link-btn icon-row" onClick={(e) => { e.stopPropagation(); setSelected({ heading, book }); }}><ChevronRight size={13} /> Open</button>
+                    <Link className="link-btn icon-row" to={`/book/${book.slug}#${heading.id}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}><ExternalLink size={13} /> New tab</Link>
                   </div>
                 </div>
               </div>
@@ -162,7 +163,7 @@ export function CategoryDetail() {
                 <p className="muted">{selected.book.author}</p>
               </div>
               <div className="side-panel-actions">
-                <Link to={`/book/${selected.book.slug}#${selected.heading.id}`} target="_blank" rel="noopener noreferrer">Open new tab ↗</Link>
+                <Link to={`/book/${selected.book.slug}#${selected.heading.id}`} target="_blank" rel="noopener noreferrer" className="icon-row"><ExternalLink size={14} /> New tab</Link>
               </div>
             </div>
             <RichTextView doc={selected.heading.content} />

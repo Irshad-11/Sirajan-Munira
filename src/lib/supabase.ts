@@ -42,6 +42,7 @@ export interface Book {
   detail_image_urls: string[];
   description: RichDoc | null;
   visibility: boolean;
+  featured: boolean;
   created_at: string;
   updated_at: string;
   source_links?: SourceLink[];
@@ -52,7 +53,7 @@ export interface Heading {
   book_id: string;
   level: 1 | 2 | 3 | 4;
   content: RichDoc;
-  page_number: number | null;
+  page_number: string | null; // free text: supports ranges like "100-104"
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -75,6 +76,7 @@ export interface DraftFolder {
   id: string;
   name: string;
   parent_folder_id: string | null;
+  sort_order: number;
 }
 
 export interface Draft {
@@ -82,6 +84,7 @@ export interface Draft {
   folder_id: string | null;
   title: string;
   content: RichDoc;
+  sort_order: number;
   updated_at: string;
 }
 
@@ -133,12 +136,16 @@ export function onAuthChange(cb: (session: Session | null) => void) {
 // ---------------------------------------------------------------------------
 
 export function slugify(title: string) {
+  // Strip to ASCII letters/digits only — a Bangla (or any non-Latin) title
+  // must never end up embedded in the URL, so non-ASCII characters are
+  // dropped entirely rather than kept. If nothing ASCII remains, the slug
+  // is just the random unique id on its own.
   const base = title
     .toLowerCase()
-    .trim()
-    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return `${base || 'book'}-${Math.random().toString(36).slice(2, 7)}`;
+  const uid = Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+  return base ? `${base}-${uid}` : uid;
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +184,7 @@ export async function createBook(book: Partial<Book>): Promise<Book> {
       detail_image_urls: book.detail_image_urls ?? [],
       description: book.description ?? null,
       visibility: book.visibility ?? true,
+      featured: book.featured ?? false,
     })
     .select()
     .single();
@@ -230,7 +238,7 @@ export async function createHeading(h: {
   book_id: string;
   level: 1 | 2 | 3 | 4;
   content: RichDoc;
-  page_number: number | null;
+  page_number: string | null;
   sort_order: number;
 }): Promise<Heading> {
   const { data, error } = await supabase.from('headings').insert(h).select().single();
@@ -332,19 +340,30 @@ export async function listCategoriesForHeading(headingId: string): Promise<strin
 // ---------------------------------------------------------------------------
 
 export async function listDraftFolders(): Promise<DraftFolder[]> {
-  const { data, error } = await supabase.from('draft_folders').select('*').order('name');
+  const { data, error } = await supabase.from('draft_folders').select('*').order('sort_order', { ascending: true });
   if (error) throw error;
   return (data as any) || [];
 }
 
 export async function createDraftFolder(name: string, parentId: string | null): Promise<DraftFolder> {
+  const existing = await listDraftFolders();
+  const sort_order = existing.length ? Math.max(...existing.map((f) => f.sort_order)) + 1 : 0;
   const { data, error } = await supabase
     .from('draft_folders')
-    .insert({ name, parent_folder_id: parentId })
+    .insert({ name, parent_folder_id: parentId, sort_order })
     .select()
     .single();
   if (error) throw error;
   return data as any;
+}
+
+export async function renameDraftFolder(id: string, name: string): Promise<void> {
+  const { error } = await supabase.from('draft_folders').update({ name }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function reorderDraftFolders(orderedIds: string[]): Promise<void> {
+  await Promise.all(orderedIds.map((id, i) => supabase.from('draft_folders').update({ sort_order: i }).eq('id', id)));
 }
 
 export async function deleteDraftFolder(id: string): Promise<void> {
@@ -353,7 +372,7 @@ export async function deleteDraftFolder(id: string): Promise<void> {
 }
 
 export async function listDrafts(folderId: string | null): Promise<Draft[]> {
-  let q = supabase.from('drafts').select('*').order('updated_at', { ascending: false });
+  let q = supabase.from('drafts').select('*').order('sort_order', { ascending: true });
   q = folderId ? q.eq('folder_id', folderId) : q.is('folder_id', null);
   const { data, error } = await q;
   if (error) throw error;
@@ -361,13 +380,24 @@ export async function listDrafts(folderId: string | null): Promise<Draft[]> {
 }
 
 export async function createDraft(folderId: string | null, title: string): Promise<Draft> {
+  const existing = await listDrafts(folderId);
+  const sort_order = existing.length ? Math.max(...existing.map((d) => d.sort_order)) + 1 : 0;
   const { data, error } = await supabase
     .from('drafts')
-    .insert({ folder_id: folderId, title, content: null })
+    .insert({ folder_id: folderId, title, content: null, sort_order })
     .select()
     .single();
   if (error) throw error;
   return data as any;
+}
+
+export async function renameDraft(id: string, title: string): Promise<void> {
+  const { error } = await supabase.from('drafts').update({ title }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function reorderDrafts(orderedIds: string[]): Promise<void> {
+  await Promise.all(orderedIds.map((id, i) => supabase.from('drafts').update({ sort_order: i }).eq('id', id)));
 }
 
 export async function updateDraft(id: string, patch: Partial<Draft>): Promise<void> {
@@ -408,6 +438,11 @@ export async function markMessageRead(id: string, read: boolean): Promise<void> 
   if (error) throw error;
 }
 
+export async function deleteMessage(id: string): Promise<void> {
+  const { error } = await supabase.from('messages').delete().eq('id', id);
+  if (error) throw error;
+}
+
 // ---------------------------------------------------------------------------
 // Analytics (FR-32–33) — coarse, no-PII events
 // ---------------------------------------------------------------------------
@@ -441,6 +476,19 @@ export async function trackEvent(
   } catch {
     // Analytics must never break the reading experience.
   }
+}
+
+export async function getBookStats(bookId: string): Promise<{ headingCount: number; viewCount: number }> {
+  const [{ count: headingCount }, { count: viewCount }] = await Promise.all([
+    supabase.from('headings').select('*', { count: 'exact', head: true }).eq('book_id', bookId),
+    supabase
+      .from('analytics_events')
+      .select('*', { count: 'exact', head: true })
+      .eq('target_type', 'book')
+      .eq('target_id', bookId)
+      .eq('event_type', 'view'),
+  ]);
+  return { headingCount: headingCount || 0, viewCount: viewCount || 0 };
 }
 
 export interface AnalyticsSummary {
