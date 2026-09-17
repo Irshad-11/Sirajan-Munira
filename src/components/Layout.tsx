@@ -1,42 +1,25 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, LogIn, LogOut, Search as SearchIcon, X, Menu, Inbox } from 'lucide-react';
+import { Settings as SettingsIcon, LogIn, LogOut, Search as SearchIcon, X, Menu, Bookmark } from 'lucide-react';
 import { useAdmin, usePrefs, THEMES } from '../lib/context';
-import { listMessages } from '../lib/supabase';
+import { getUnreadMessageCount, getSiteSetting, setSiteSetting } from '../lib/supabase';
 
 export const SAFEENAH_URL = 'https://irshad-11.github.io/Safeenah/';
 
 // ---------------------------------------------------------------------------
-// Admin login box (FR-27): minimal box bottom-right, no dedicated page
+// Admin login box
 // ---------------------------------------------------------------------------
-
 function AdminLoginBox() {
   const { loginOpen, setLoginOpen, login, error } = useAdmin();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
-
   if (!loginOpen) return null;
-
   const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await login(email, password);
-    } catch {
-      /* error shown via context */
-    } finally {
-      setBusy(false);
-    }
+    e.preventDefault(); setBusy(true);
+    try { await login(email, password); } catch {} finally { setBusy(false); }
   };
-
-  // Rendered via a portal straight into <body>: `.site-nav` is a fixed,
-  // transformed element (for the hide-on-scroll effect), which makes it the
-  // containing block for any `position: fixed` descendant. Left in place,
-  // this box (and the settings panel below) would be positioned relative to
-  // the ~60px-tall nav bar instead of the viewport, pinning them near the
-  // top of the page instead of where they're meant to sit.
   return createPortal(
     <div className="admin-login-box">
       <button className="close-x" onClick={() => setLoginOpen(false)} aria-label="Close"><X size={14} /></button>
@@ -45,9 +28,7 @@ function AdminLoginBox() {
         <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         {error && <p className="form-error">{error}</p>}
-        <button type="submit" disabled={busy} className="primary full-width">
-          {busy ? 'Signing in…' : 'Log in'}
-        </button>
+        <button type="submit" disabled={busy} className="primary full-width">{busy ? 'Signing in…' : 'Log in'}</button>
       </form>
     </div>,
     document.body
@@ -55,16 +36,10 @@ function AdminLoginBox() {
 }
 
 // ---------------------------------------------------------------------------
-// Settings panel (theme, font, bookmarks clear, copy-format) FR-22–25
+// Settings panel
 // ---------------------------------------------------------------------------
-
 function SettingsPanel({ onClose }: { onClose: () => void }) {
   const { theme, setTheme, englishFont, setEnglishFont, copySettings, setCopySettings, clearLocalData, bookmarks } = usePrefs();
-
-  // Also portaled to <body> for the same containing-block reason as
-  // AdminLoginBox above — otherwise this backdrop only covers the nav bar's
-  // own box instead of the full viewport, which cuts the panel off near the
-  // top of the screen.
   return createPortal(
     <div className="settings-backdrop" onClick={onClose}>
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
@@ -72,42 +47,34 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
           <h3 className="icon-row"><SettingsIcon size={17} /> Settings</h3>
           <button onClick={onClose}><X size={16} /></button>
         </div>
-
         <section>
           <h4>Theme</h4>
           <div className="theme-grid">
             {THEMES.map((t) => (
-              <button key={t.id} className={`theme-swatch ${theme === t.id ? 'active' : ''}`} onClick={() => setTheme(t.id)}>
-                {t.label}
-              </button>
+              <button key={t.id} className={`theme-swatch ${theme === t.id ? 'active' : ''}`} onClick={() => setTheme(t.id)}>{t.label}</button>
             ))}
           </div>
         </section>
-
         <section>
           <h4>Font</h4>
           <div className="font-choices">
             {(['inter', 'roboto', 'lora'] as const).map((f) => (
               <button key={f} className={englishFont === f ? 'active' : ''} onClick={() => setEnglishFont(f)}>
-                {f === 'inter' ? 'Inter' : f === 'roboto' ? 'Roboto' : 'Lora (Editorial)'}
+                {f === 'inter' ? 'Inter' : f === 'roboto' ? 'Roboto' : 'Lora'}
               </button>
             ))}
           </div>
         </section>
-
         <section>
           <h4>Copy format</h4>
           <label className="check"><input type="checkbox" checked={copySettings.includeBookTitle} onChange={(e) => setCopySettings({ ...copySettings, includeBookTitle: e.target.checked })} /> Book title</label>
           <label className="check"><input type="checkbox" checked={copySettings.includePageNumber} onChange={(e) => setCopySettings({ ...copySettings, includePageNumber: e.target.checked })} /> Page number</label>
           <label className="check"><input type="checkbox" checked={copySettings.includeSourceLink} onChange={(e) => setCopySettings({ ...copySettings, includeSourceLink: e.target.checked })} /> Source link</label>
         </section>
-
         <section>
           <h4>Local data</h4>
-          <p className="muted">{bookmarks.length} bookmark(s) saved on this device.</p>
-          <button className="danger" onClick={() => { if (confirm('Clear bookmarks, theme and font preferences from this device?')) clearLocalData(); }}>
-            Clear local data
-          </button>
+          <p className="muted">{bookmarks.length} bookmark(s) saved.</p>
+          <button className="danger" onClick={() => { if (confirm('Clear local data?')) clearLocalData(); }}>Clear local data</button>
         </section>
       </div>
     </div>,
@@ -116,9 +83,8 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// Top nav + footer shell
+// NavBar
 // ---------------------------------------------------------------------------
-
 export function NavBar() {
   const { isAdmin, setLoginOpen, logout } = useAdmin();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -126,31 +92,25 @@ export function NavBar() {
   const [hidden, setHidden] = useState(false);
   const [q, setQ] = useState('');
   const [unread, setUnread] = useState(0);
-  const navRef = React.useRef<HTMLElement | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isAdmin) return;
-    const load = () => listMessages().then((m) => setUnread(m.filter((x) => !x.read).length)).catch(() => {});
+    const load = () => getUnreadMessageCount().then(setUnread).catch(() => {});
     load();
-    const t = setInterval(load, 30000);
+    const t = setInterval(load, 60_000);
     return () => clearInterval(t);
-  }, [isAdmin]);
+  }, []);
 
-  // Measure actual nav height so page content (fixed nav) and the book
-  // sidebar can offset themselves correctly, including after wrapping on
-  // narrow screens or the admin-mode border adding a couple of pixels.
   useEffect(() => {
-    const setHeightVar = () => {
+    const setH = () => {
       if (navRef.current) document.documentElement.style.setProperty('--nav-height', `${navRef.current.offsetHeight}px`);
     };
-    setHeightVar();
-    window.addEventListener('resize', setHeightVar);
-    return () => window.removeEventListener('resize', setHeightVar);
+    setH();
+    window.addEventListener('resize', setH);
+    return () => window.removeEventListener('resize', setH);
   }, [menuOpen]);
 
-  // Hides on scroll-down, reappears on the slightest scroll-up — never
-  // fully gone, just out of the way while reading further down the page.
   useEffect(() => {
     let lastY = window.scrollY;
     const onScroll = () => {
@@ -186,33 +146,97 @@ export function NavBar() {
         {isAdmin && <NavLink to="/drafts" onClick={() => setMenuOpen(false)}>Drafts</NavLink>}
         {isAdmin && <NavLink to="/analytics" onClick={() => setMenuOpen(false)}>Analytics</NavLink>}
         <NavLink to="/about" onClick={() => setMenuOpen(false)}>About</NavLink>
-        <NavLink to="/contact" onClick={() => setMenuOpen(false)}>
-          {isAdmin ? 'Inbox' : 'Contact'}
-          {isAdmin && unread > 0 && <span className="nav-dot" />}
-        </NavLink>
+        <NavLink to="/contact" onClick={() => setMenuOpen(false)}>{isAdmin ? 'Inbox' : 'Contact'}</NavLink>
       </nav>
 
       <form className="nav-search icon-row" onSubmit={submitSearch}>
         <SearchIcon size={14} className="muted" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" />
       </form>
+
       <div className="nav-actions">
+        {/* Bookmarks shortcut */}
+        <Link to="/bookmarks" className="icon-btn" title="My bookmarks"><Bookmark size={16} /></Link>
         <button onClick={() => setSettingsOpen(true)} title="Settings" className="icon-btn"><SettingsIcon /></button>
+
         {isAdmin ? (
-          <button onClick={logout} title="Log out" className="icon-btn admin-tag"><LogOut /></button>
+          <button onClick={logout} title="Log out" className="icon-btn admin-tag nav-auth-badge-wrap">
+            <LogOut size={17} />
+            {unread > 0 && <span className="nav-unread-badge">{unread > 9 ? '9+' : unread}</span>}
+          </button>
         ) : (
-          <button onClick={() => setLoginOpen(true)} title="Admin login" className="icon-btn"><LogIn /></button>
+          /* Icon-only login button with red dot / count when there are messages */
+          <button onClick={() => setLoginOpen(true)} title="Admin login" className="icon-btn nav-auth-badge-wrap">
+            <LogIn size={16} />
+            {unread > 0 && <span className="nav-unread-badge">{unread > 9 ? '9+' : unread}</span>}
+          </button>
         )}
       </div>
+
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
       <AdminLoginBox />
     </header>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Editable footer year (admin clicks to change)
+// ---------------------------------------------------------------------------
+function FooterYear() {
+  const { isAdmin } = useAdmin();
+  const [year, setYear] = useState<string>(String(new Date().getFullYear()));
+  const [lastEdit, setLastEdit] = useState<string>('');
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  useEffect(() => {
+    getSiteSetting('footer').then((val) => {
+      if (val?.year) setYear(String(val.year));
+      if (val?.last_edit) setLastEdit(val.last_edit);
+    });
+  }, []);
+
+  const save = async () => {
+    const today = new Date().toLocaleDateString('en-GB');
+    await setSiteSetting('footer', { year: draft || year, last_edit: today });
+    setYear(draft || year);
+    setLastEdit(today);
+    setEditing(false);
+  };
+
+  if (editing && isAdmin) {
+    return (
+      <span className="footer-year-edit">
+        ©&nbsp;
+        <input
+          className="footer-year-input"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+          autoFocus
+          size={4}
+        />
+        <button className="footer-year-save link-btn" onClick={save}>✓</button>
+      </span>
+    );
+  }
+
+  return (
+    <span>
+      ©&nbsp;
+      {isAdmin
+        ? <button className="footer-year-btn" onClick={() => { setDraft(year); setEditing(true); }} title="Click to edit year">{year}</button>
+        : year
+      }
+      {lastEdit && <span className="footer-last-edit"> · Last updated {lastEdit}</span>}
+    </span>
+  );
+}
+
 export function SiteFooter() {
   return (
     <footer className="site-footer">
+      <style>{FOOTER_CSS}</style>
       <div className="footer-cols">
         <span className="footer-brand">
           Sirājan Munīrā — an imprint of <a href={SAFEENAH_URL} target="_blank" rel="noopener noreferrer">Safeenah</a>
@@ -220,10 +244,11 @@ export function SiteFooter() {
         <nav>
           <Link to="/books">Bookshelf</Link>
           <Link to="/collections">Collections</Link>
+          <Link to="/bookmarks">Bookmarks</Link>
           <Link to="/about">About</Link>
           <Link to="/contact">Contact</Link>
         </nav>
-        <span>© {new Date().getFullYear()}</span>
+        <FooterYear />
       </div>
     </footer>
   );
@@ -240,3 +265,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+const FOOTER_CSS = `
+.nav-auth-badge-wrap { position: relative; }
+.nav-unread-badge {
+  position: absolute; top: -6px; right: -6px;
+  min-width: 16px; height: 16px; border-radius: 8px;
+  background: #c0392b; color: #fff;
+  font-size: 0.58rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 3px; border: 2px solid var(--bg);
+  animation: badgePop 0.3s cubic-bezier(.36,1.56,.64,1);
+}
+@keyframes badgePop { from{transform:scale(0)} to{transform:scale(1)} }
+.footer-year-btn {
+  border-bottom: 1px dotted var(--muted); color: var(--muted);
+  cursor: pointer; background: none; font-size: inherit;
+  transition: color 0.15s;
+}
+.footer-year-btn:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.footer-year-input {
+  width: 48px; background: transparent; border: none;
+  border-bottom: 1px solid var(--accent); color: var(--fg);
+  font-size: inherit; text-align: center; padding: 0;
+}
+.footer-year-input:focus { outline: none; }
+.footer-year-save { font-size: 0.8rem; margin-left: 4px; }
+.footer-year-edit { display: inline-flex; align-items: center; gap: 2px; }
+.footer-last-edit { font-size: 0.72rem; color: var(--muted); }
+@media(max-width: 720px) {
+  .nav-search { display: none; }
+}
+`;

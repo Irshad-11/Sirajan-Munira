@@ -9,7 +9,6 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const STORAGE_BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || 'sirajan-munira-media';
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  // eslint-disable-next-line no-console
   console.warn(
     '[Sirājan Munīrā] Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. Copy .env.example to .env and fill in your Supabase project credentials.'
   );
@@ -18,10 +17,10 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ---------------------------------------------------------------------------
-// Types (mirrors the Data Model in §6 of the SRS)
+// Types
 // ---------------------------------------------------------------------------
 
-export type RichDoc = any; // TipTap/ProseMirror JSON document
+export type RichDoc = any;
 
 export interface SourceLink {
   id: string;
@@ -53,8 +52,9 @@ export interface Heading {
   book_id: string;
   level: 1 | 2 | 3 | 4;
   content: RichDoc;
-  page_number: string | null; // free text: supports ranges like "100-104"
+  page_number: string | null;
   sort_order: number;
+  importance_level: number | null; // 1–5, admin-assigned
   created_at: string;
   updated_at: string;
 }
@@ -66,6 +66,15 @@ export interface Category {
   banner_image_url: string | null;
   description: string | null;
   featured: boolean;
+  visibility: boolean;   // admin can hide collections from guests
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CategoryStats {
+  entryCount: number;
+  bookCount: number;
+  viewCount: number;
 }
 
 export interface CategoryHeadingRow {
@@ -109,7 +118,7 @@ export interface MessageRow {
 }
 
 // ---------------------------------------------------------------------------
-// Auth (FR-27–29): email+password only, no signup, single admin tier
+// Auth (FR-27–29)
 // ---------------------------------------------------------------------------
 
 export async function signInAdmin(email: string, password: string) {
@@ -137,10 +146,6 @@ export function onAuthChange(cb: (session: Session | null) => void) {
 // ---------------------------------------------------------------------------
 
 export function slugify(title: string) {
-  // Strip to ASCII letters/digits only — a Bangla (or any non-Latin) title
-  // must never end up embedded in the URL, so non-ASCII characters are
-  // dropped entirely rather than kept. If nothing ASCII remains, the slug
-  // is just the random unique id on its own.
   const base = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -216,7 +221,7 @@ export async function replaceSourceLinks(bookId: string, links: { label: string;
 }
 
 // ---------------------------------------------------------------------------
-// Headings (FR-11–14) — deep-linkable units; id is stable from creation
+// Headings (FR-11–14)
 // ---------------------------------------------------------------------------
 
 export async function listHeadings(bookId: string): Promise<Heading[]> {
@@ -255,6 +260,14 @@ export async function updateHeading(id: string, patch: Partial<Heading>): Promis
   if (error) throw error;
 }
 
+export async function updateHeadingImportance(id: string, level: number | null): Promise<void> {
+  const { error } = await supabase
+    .from('headings')
+    .update({ importance_level: level, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 export async function deleteHeading(id: string): Promise<void> {
   const { error } = await supabase.from('headings').delete().eq('id', id);
   if (error) throw error;
@@ -264,10 +277,41 @@ export async function deleteHeading(id: string): Promise<void> {
 // Categories / Collections (FR-15–18)
 // ---------------------------------------------------------------------------
 
-export async function listCategories(): Promise<Category[]> {
-  const { data, error } = await supabase.from('categories').select('*').order('name');
+export async function listCategories(opts?: { includeHidden?: boolean }): Promise<Category[]> {
+  let q = supabase.from('categories').select('*').order('name');
+  if (!opts?.includeHidden) q = q.eq('visibility', true);
+  const { data, error } = await q;
   if (error) throw error;
   return (data as any) || [];
+}
+
+export async function getCategoryStats(categoryId: string): Promise<CategoryStats> {
+  const [{ count: entryCount }, { data: headingRows }, { count: viewCount }] = await Promise.all([
+    supabase
+      .from('category_headings')
+      .select('*', { count: 'exact', head: true })
+      .eq('category_id', categoryId),
+    supabase
+      .from('category_headings')
+      .select('headings!inner(book_id)')
+      .eq('category_id', categoryId),
+    supabase
+      .from('analytics_events')
+      .select('*', { count: 'exact', head: true })
+      .eq('target_type', 'category')
+      .eq('target_id', categoryId)
+      .eq('event_type', 'view'),
+  ]);
+
+  const bookIds = new Set(
+    (headingRows || []).map((r: any) => r.headings?.book_id).filter(Boolean)
+  );
+
+  return {
+    entryCount: entryCount || 0,
+    bookCount: bookIds.size,
+    viewCount: viewCount || 0,
+  };
 }
 
 export async function createCategory(c: Partial<Category>): Promise<Category> {
@@ -279,6 +323,7 @@ export async function createCategory(c: Partial<Category>): Promise<Category> {
       banner_image_url: c.banner_image_url ?? null,
       description: c.description ?? null,
       featured: c.featured ?? false,
+      visibility: c.visibility ?? true,
     })
     .select()
     .single();
@@ -287,7 +332,10 @@ export async function createCategory(c: Partial<Category>): Promise<Category> {
 }
 
 export async function updateCategory(id: string, patch: Partial<Category>): Promise<void> {
-  const { error } = await supabase.from('categories').update(patch).eq('id', id);
+  const { error } = await supabase
+    .from('categories')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) throw error;
 }
 
@@ -445,8 +493,20 @@ export async function deleteMessage(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Public: returns unread message count via a SECURITY DEFINER RPC.
+ *  Requires `schema_migration.sql` to have been run (creates the function). */
+export async function getUnreadMessageCount(): Promise<number> {
+  try {
+    const { data, error } = await supabase.rpc('get_unread_message_count');
+    if (error) return 0;
+    return (data as number) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Analytics (FR-32–33) — coarse, no-PII events
+// Analytics (FR-32–33)
 // ---------------------------------------------------------------------------
 
 export function getAnonVisitorId(): string {
@@ -465,18 +525,19 @@ export function getAnonVisitorId(): string {
 
 export async function trackEvent(
   eventType: 'view' | 'interact',
-  targetType: AnalyticsEvent['target_type'],
+  targetType: 'book' | 'heading' | 'category' | 'site',
   targetId: string | null
-) {
+): Promise<void> {
   try {
+    const anon_visitor_id = getAnonVisitorId();
     await supabase.from('analytics_events').insert({
       event_type: eventType,
       target_type: targetType,
       target_id: targetId,
-      anon_visitor_id: getAnonVisitorId(),
+      anon_visitor_id,
     });
   } catch {
-    // Analytics must never break the reading experience.
+    // analytics are non-critical
   }
 }
 
@@ -522,7 +583,7 @@ export async function getAnalyticsSummary(): Promise<AnalyticsSummary> {
 export async function getLiveStats() {
   const [{ count: bookCount }, { count: categoryCount }] = await Promise.all([
     supabase.from('books').select('*', { count: 'exact', head: true }).eq('visibility', true),
-    supabase.from('categories').select('*', { count: 'exact', head: true }),
+    supabase.from('categories').select('*', { count: 'exact', head: true }).eq('visibility', true),
   ]);
   const { data: visitorRows } = await supabase.from('analytics_events').select('anon_visitor_id');
   const totalVisitors = new Set((visitorRows || []).map((r: any) => r.anon_visitor_id)).size;
@@ -549,7 +610,7 @@ export async function siteSearch(query: string): Promise<SearchResult[]> {
 
   const [booksByMeta, categories, headingsByBook] = await Promise.all([
     supabase.from('books').select('id, slug, title, author, cover_image_url').eq('visibility', true).or(`title.ilike.${like},author.ilike.${like}`),
-    supabase.from('categories').select('id, name, banner_image_url').ilike('name', like),
+    supabase.from('categories').select('id, name, banner_image_url').eq('visibility', true).ilike('name', like),
     supabase
       .from('headings')
       .select('id, book_id, content, books!inner(slug, title, cover_image_url, visibility)')
@@ -566,8 +627,6 @@ export async function siteSearch(query: string): Promise<SearchResult[]> {
     results.push({ type: 'category', id: c.id, title: c.name, href: `/collections/${c.id}`, image: c.banner_image_url });
   });
 
-  // Full-text scan across heading rich-text bodies (client-side substring match,
-  // adequate at this project's scale; swap for a Postgres tsvector index if it grows).
   const lower = term.toLowerCase();
   (headingsByBook.data || []).forEach((h: any) => {
     const text = docToPlainTextSafe(h.content);
@@ -601,7 +660,7 @@ function docToPlainTextSafe(doc: any): string {
 }
 
 // ---------------------------------------------------------------------------
-// Storage (image upload) — NFR-2: client resizes/compresses before upload
+// Storage (image upload)
 // ---------------------------------------------------------------------------
 
 export async function compressImage(file: File, maxDim = 1600, quality = 0.82): Promise<Blob> {
@@ -656,14 +715,12 @@ export async function exportAllData(): Promise<Blob> {
       draft_folders: folders.data || [],
       drafts: drafts.data || [],
     },
-    note: 'Storage file URLs are included inline on each record (cover_image_url, detail_image_urls, banner_image_url). Download those files separately from Supabase Storage if you need a full offline mirror.',
   };
   return new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
 }
 
 export async function importAllData(json: any): Promise<void> {
   const t = json.tables || {};
-  // Order matters for foreign keys.
   for (const [table, rows] of [
     ['books', t.books],
     ['source_links', t.source_links],
@@ -678,4 +735,52 @@ export async function importAllData(json: any): Promise<void> {
       if (error) throw new Error(`Import failed on table "${table}": ${error.message}`);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Site settings (quotes, footer year, etc.)
+// ---------------------------------------------------------------------------
+
+export async function getSiteSetting(key: string): Promise<any> {
+  try {
+    const { data } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', key)
+      .maybeSingle();
+    return data?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setSiteSetting(key: string, value: any): Promise<void> {
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ key, value, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Bookmarks page — fetch headings by IDs
+// ---------------------------------------------------------------------------
+
+export async function getHeadingsByIds(ids: string[]): Promise<Heading[]> {
+  if (!ids.length) return [];
+  const { data, error } = await supabase
+    .from('headings')
+    .select('*')
+    .in('id', ids);
+  if (error) throw error;
+  return (data as any) || [];
+}
+
+export async function getBookById(id: string): Promise<Book | null> {
+  const { data, error } = await supabase
+    .from('books')
+    .select('*, source_links(*)')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data as any;
 }

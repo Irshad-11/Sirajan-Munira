@@ -1,0 +1,272 @@
+/* ===========================================================================
+   Sirājan Munīrā — Style Additions (append to bottom of index.css)
+   These supplement the base styles and should not conflict with existing rules.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Nav: Login button (visible to all users), unread badge
+   --------------------------------------------------------------------------- */
+
+/* Styled "Login" button in nav-actions — visible to all guests */
+.nav-login-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  border: 1.5px solid var(--accent);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.nav-login-btn:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+}
+.nav-login-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Bell icon ring animation */
+.nav-bell-ring {
+  animation: bellRing 1.8s ease-in-out infinite;
+  transform-origin: top center;
+}
+@keyframes bellRing {
+  0%, 60%, 80%, 100% { transform: rotate(0deg); }
+  10% { transform: rotate(-18deg); }
+  30% { transform: rotate(18deg); }
+  50% { transform: rotate(-10deg); }
+  70% { transform: rotate(10deg); }
+  90% { transform: rotate(-5deg); }
+}
+
+/* Unread message badge on nav buttons */
+.nav-unread-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: #c0392b;
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid var(--bg);
+  animation: badgePop 0.3s cubic-bezier(.36,1.56,.64,1);
+}
+@keyframes badgePop { from{transform:scale(0)} to{transform:scale(1)} }
+
+/* Admin logout button position context */
+.nav-auth-btn {
+  position: relative;
+}
+
+/* ---------------------------------------------------------------------------
+   Global skeleton animation (used in multiple pages)
+   --------------------------------------------------------------------------- */
+.skeleton-pulse {
+  background: color-mix(in srgb, var(--border) 80%, var(--fg) 20%);
+  border-radius: 4px;
+  animation: skeletonPulse 1.4s ease-in-out infinite;
+}
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ---------------------------------------------------------------------------
+   Shared carousel — used by Collections and Bookshelf
+   --------------------------------------------------------------------------- */
+.col-featured-section { margin-bottom: 2rem; }
+.col-featured-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.col-carousel-nav { display: flex; align-items: center; gap: 0.5rem; }
+.col-carousel-btn {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface);
+  display: grid; place-items: center; color: var(--fg);
+  transition: border-color 0.15s, color 0.15s;
+}
+.col-carousel-btn:hover { border-color: var(--accent); color: var(--accent); }
+.col-carousel-count { font-size: 0.78rem; color: var(--muted); }
+
+.col-carousel-track {
+  position: relative;
+  overflow: hidden;
+  min-height: 300px;
+}
+.col-carousel-slide {
+  position: absolute;
+  inset: 0;
+  transition: transform 0.45s cubic-bezier(.4,0,.2,1), opacity 0.45s;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(100%);
+}
+.col-carousel-slide--active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+.col-carousel-slide--prev { transform: translateX(-100%); }
+.col-carousel-slide--next { transform: translateX(100%); }
+
+.col-carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+}
+.col-carousel-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--border);
+  padding: 0;
+  transition: background 0.2s, transform 0.2s;
+}
+.col-carousel-dot--active {
+  background: var(--accent);
+  transform: scale(1.35);
+}
+
+.col-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--fg);
+  margin: 0 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.col-section-title--secondary { margin-top: 2rem; }
+
+/* Admin actions row — reused across collection and bookshelf cards */
+.col-admin-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  margin-top: 0.4rem;
+}
+.col-admin-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--muted);
+  border-bottom: 1px solid transparent;
+  transition: color 0.12s, border-color 0.12s;
+}
+.col-admin-actions button:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.col-admin-actions button.danger:hover { color: #c0392b; border-bottom-color: #c0392b; }
+
+/* Open button in cards */
+.col-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--accent);
+  color: #fff;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.col-open-btn:hover { opacity: 0.88; }
+
+/* ---------------------------------------------------------------------------
+   Dropdown menu fade animation (shared by 3-dot menus)
+   --------------------------------------------------------------------------- */
+@keyframes menuFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Book page — heading controls always visible (not just on hover)
+   --------------------------------------------------------------------------- */
+/* Make heading controls always visible — overrides the opacity: 0 default */
+.heading-controls {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* Collection badges on headings */
+.heading-cat-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+.heading-cat-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* Bookmarked heading highlight */
+.heading-block--bookmarked {
+  border-left: 2.5px solid #b8860b;
+  padding-left: 0.75rem;
+  background: color-mix(in srgb, #b8860b 4%, transparent);
+}
+
+/* Sidebar: current heading highlight */
+.book-sidebar-list .sidebar-item--current button {
+  color: var(--accent) !important;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 0.5rem 0.3rem;
+  border-radius: 4px;
+  transition: background 0.3s ease;
+}
+.book-sidebar-list .sidebar-item--bookmarked button {
+  color: #b8860b !important;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Badge shared styles
+   --------------------------------------------------------------------------- */
+.badge {
+  font-size: 0.6rem;
+  color: #c0392b;
+  border: 1px solid #c0392b;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ---------------------------------------------------------------------------
+   Mobile: responsive tweaks for nav login button
+   --------------------------------------------------------------------------- */
+@media (max-width: 720px) {
+  .nav-login-label { display: none; }
+  .nav-login-btn { padding: 0.3rem 0.5rem; }
+}

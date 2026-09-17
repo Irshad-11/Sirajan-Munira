@@ -10,6 +10,7 @@ import Drafts from './pages/Drafts';
 import SearchPage from './pages/Search';
 import Analytics from './pages/Analytics';
 import { AboutPage, ContactPage } from './pages/StaticPages';
+import BookmarksPage from './pages/Bookmarks';
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
+              <Route path="/bookmarks" element={<BookmarksPage />} />
               <Route path="*" element={<Landing />} />
             </Routes>
           </Layout>
