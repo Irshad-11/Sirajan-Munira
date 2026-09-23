@@ -1,316 +1,30 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Pencil, Eye, EyeOff, Trash2, Plus, Star, ChevronRight, Loader2, BookOpen } from 'lucide-react';
 import {
-  Pencil, Eye, EyeOff, Trash2, Plus, Star, BookOpen, Users,
-  MoreVertical, Printer, Download, Copy, Calendar, RefreshCw,
-  ChevronLeft, ChevronRight, X,
-} from 'lucide-react';
-import {
-  Book, createBook, deleteBook, getBookStats, listBooks,
-  listHeadings, replaceSourceLinks, updateBook, uploadImage,
+  Book, BookStats, createBook, deleteBook, getBookStatsMany, listBooksPage,
+  replaceSourceLinks, updateBook, uploadImage,
 } from '../lib/supabase';
 import { useAdmin, useTrackView } from '../lib/context';
 import { RichEditor } from '../components/Editor';
-import { docToMarkdown, docToPlainText, ImageCarousel, ImageLightboxProvider, useImageLightbox } from '../lib/richtext';
+import { docToPlainText } from '../lib/richtext';
+import { BookExportMenu } from '../lib/bookExport';
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Constants / helpers
 // ---------------------------------------------------------------------------
+
+const FEATURED_LIMIT = 24;         // featured sets are small; all are shown
+const PAGE_SIZE = 18;
 
 function fmtDate(d?: string) {
-  if (!d) return '—';
+  if (!d) return '';
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
-
-function SkeletonCard() {
-  return (
-    <div className="bk-skeleton-card">
-      <div className="skeleton-pulse bk-skeleton__cover" />
-      <div className="skeleton-pulse" style={{ width: '70%', height: 12, marginTop: 8, marginBottom: 4 }} />
-      <div className="skeleton-pulse" style={{ width: '50%', height: 10 }} />
-    </div>
-  );
-}
+function plural(n: number, one: string, many = `${one}s`) { return `${n} ${n === 1 ? one : many}`; }
 
 // ---------------------------------------------------------------------------
-// Three-dot dropdown menu
-// ---------------------------------------------------------------------------
-
-function ThreeDotMenu({ book }: { book: Book }) {
-  const [open, setOpen] = useState(false);
-  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
-  const btnRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => setOpen(false);
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const openMenu = () => {
-    if (!btnRef.current) return;
-    const rect = btnRef.current.getBoundingClientRect();
-    const menuW = 210; const menuH = 130;
-    const vw = window.innerWidth; const vh = window.innerHeight;
-    const style: React.CSSProperties = { position: 'fixed', zIndex: 9999 };
-    style.left = rect.right + menuW > vw ? Math.max(4, rect.right - menuW) : rect.left;
-    style.top = rect.bottom + menuH > vh ? rect.top - menuH - 4 : rect.bottom + 4;
-    setMenuStyle(style);
-    setOpen((v) => !v);
-  };
-
-  const printAsPdf = async () => {
-    setOpen(false);
-    const headings = await listHeadings(book.id);
-    openBookPrintWindow(book, headings);
-  };
-  const downloadMarkdown = async () => {
-    setOpen(false);
-    const headings = await listHeadings(book.id);
-    downloadBlob(buildBookMarkdown(book, headings), `${sanitizeFilename(book.title)}.md`, 'text/markdown');
-  };
-  const copyMarkdown = async () => {
-    setOpen(false);
-    const headings = await listHeadings(book.id);
-    try { await navigator.clipboard.writeText(buildBookMarkdown(book, headings)); alert('Copied!'); }
-    catch { alert('Copy failed — try Download.'); }
-  };
-
-  return (
-    <>
-      <button ref={btnRef} className="bk-three-dot__btn" onClick={openMenu} title="More options" onMouseDown={(e) => e.stopPropagation()}>
-        <MoreVertical size={15} />
-      </button>
-      {open && createPortal(
-        <div className="bk-three-dot__menu" style={menuStyle} onMouseDown={(e) => e.stopPropagation()}>
-          <button onClick={printAsPdf}><Printer size={13} /> Print as PDF</button>
-          <button onClick={downloadMarkdown}><Download size={13} /> Download as Markdown</button>
-          <button onClick={copyMarkdown}><Copy size={13} /> Copy as Markdown</button>
-        </div>,
-        document.body
-      )}
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// PDF & Markdown generation
-// ---------------------------------------------------------------------------
-
-function sanitizeFilename(s: string) {
-  return s.replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_').slice(0, 80);
-}
-
-function downloadBlob(text: string, filename: string, type: string) {
-  const blob = new Blob([text], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function buildBookMarkdown(book: Book, headings: any[]): string {
-  const lines: string[] = [];
-  lines.push(`# ${book.title}`);
-  if (book.author) lines.push(`**Author:** ${book.author}`);
-  if (book.publisher) lines.push(`**Publisher:** ${book.publisher}`);
-  if (book.base_language) lines.push(`**Language:** ${book.base_language}`);
-  lines.push('');
-  if (book.source_links?.length) {
-    lines.push('## Sources');
-    book.source_links.forEach((l) => lines.push(`- [${l.label}](${l.url})`));
-    lines.push('');
-  }
-  lines.push('---');
-  lines.push('');
-  headings.forEach((h) => {
-    if (h.page_number) lines.push(`*Page ${h.page_number}*`);
-    lines.push(docToMarkdown(h.content));
-    lines.push('');
-    lines.push('---');
-    lines.push('');
-  });
-  return lines.join('\n');
-}
-
-function escHtml(s: string): string {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function inlineToHtml(nodes: any[] = []): string {
-  return nodes.map((n: any) => {
-    if (n.type !== 'text') return '';
-    let t = escHtml(n.text || '');
-    const m = n.marks || [];
-    if (m.some((x: any) => x.type === 'bold')) t = `<strong>${t}</strong>`;
-    if (m.some((x: any) => x.type === 'italic')) t = `<em>${t}</em>`;
-    if (m.some((x: any) => x.type === 'underline')) t = `<u>${t}</u>`;
-    if (m.some((x: any) => x.type === 'code')) t = `<code>${t}</code>`;
-    const lnk = m.find((x: any) => x.type === 'link');
-    if (lnk?.attrs?.href) t = `<a href="${lnk.attrs.href}">${t}</a>`;
-    return t;
-  }).join('');
-}
-
-function nodeToHtml(n: any): string {
-  if (!n) return '';
-  switch (n.type) {
-    case 'doc': return (n.content || []).map(nodeToHtml).join('');
-    case 'paragraph': return `<p>${inlineToHtml(n.content) || '&#8203;'}</p>`;
-    case 'heading': { const lv = n.attrs?.level || 1; return `<h${lv}>${inlineToHtml(n.content)}</h${lv}>`; }
-    case 'blockquote': return `<blockquote>${(n.content || []).map(nodeToHtml).join('')}</blockquote>`;
-    case 'bulletList': return `<ul>${(n.content || []).map((li: any) => `<li>${(li.content || []).map(nodeToHtml).join('')}</li>`).join('')}</ul>`;
-    case 'orderedList': return `<ol>${(n.content || []).map((li: any) => `<li>${(li.content || []).map(nodeToHtml).join('')}</li>`).join('')}</ol>`;
-    case 'horizontalRule': return '<hr>';
-    case 'annotatedImage': {
-      const src = n.attrs?.src; if (!src) return '';
-      return `<figure class="doc-img"><img src="${src}" alt="${escHtml(n.attrs?.alt || '')}" /></figure>`;
-    }
-    default:
-      if (Array.isArray(n.content)) return n.content.map(nodeToHtml).join('');
-      return '';
-  }
-}
-
-function docToRichHtml(doc: any): string {
-  return doc ? nodeToHtml(doc) : '';
-}
-
-function extractDocImages(doc: any): string[] {
-  const imgs: string[] = [];
-  const walk = (n: any) => {
-    if (!n) return;
-    if (n.type === 'annotatedImage' && n.attrs?.src) imgs.push(n.attrs.src);
-    if (Array.isArray(n.content)) n.content.forEach(walk);
-  };
-  walk(doc);
-  return imgs;
-}
-
-function openBookPrintWindow(book: Book, headings: any[]) {
-  const PDF_FINDINGS_START_PAGE = 4;
-
-  const tocRows = headings.map((h, i) => {
-    const title = docToPlainText(h.content).slice(0, 90);
-    return `<tr>
-      <td class="toc-sl">${i + 1}</td>
-      <td class="toc-title">${escHtml(title)}${title.length >= 90 ? '&hellip;' : ''}</td>
-      <td class="toc-book-pg">${escHtml(String(h.page_number || '&mdash;'))}</td>
-      <td class="toc-pdf-pg">${PDF_FINDINGS_START_PAGE + i}</td>
-    </tr>`;
-  }).join('');
-
-  const metaRows = [
-    book.author ? `<tr><td>Author</td><td>${escHtml(book.author)}</td></tr>` : '',
-    book.publisher ? `<tr><td>Publisher</td><td>${escHtml(book.publisher)}</td></tr>` : '',
-    book.base_language ? `<tr><td>Language</td><td>${escHtml(book.base_language)}</td></tr>` : '',
-    `<tr><td>Total Entries</td><td>${headings.length}</td></tr>`,
-  ].filter(Boolean).join('');
-
-  const sourceLinksHtml = book.source_links?.length
-    ? `<div style="margin-top:0.8rem"><strong style="font-size:9pt;text-transform:uppercase;letter-spacing:0.06em;">Sources</strong><ul class="source-list">${
-        book.source_links.map(l => `<li><a href="${escHtml(l.url)}">${escHtml(l.label)}</a></li>`).join('')
-      }</ul></div>` : '';
-
-  const detailImgsHtml = book.detail_image_urls?.length
-    ? `<div style="margin-top:0.8rem"><strong style="font-size:9pt;text-transform:uppercase;letter-spacing:0.06em;">Images</strong><div class="detail-imgs">${
-        book.detail_image_urls.map(u => `<img src="${u}" alt="" class="detail-img" />`).join('')
-      }</div></div>` : '';
-
-  const headingsHtml = headings.map(h => {
-    const richHtml = docToRichHtml(h.content);
-    const extraImgs = extractDocImages(h.content);
-    const extraImgsHtml = extraImgs.length
-      ? `<div class="heading-imgs">${extraImgs.map(src => `<img src="${src}" alt="" class="heading-img" />`).join('')}</div>`
-      : '';
-    return `<div class="finding">
-      ${h.page_number ? `<div class="finding-page">Page ${escHtml(String(h.page_number))}</div>` : ''}
-      <div class="finding-content">${richHtml}</div>
-      ${extraImgsHtml}
-    </div>`;
-  }).join('');
-
-  const title = escHtml(book.title);
-  const coverImg = book.cover_image_url ? `<img src="${book.cover_image_url}" alt="" />` : '';
-  const authorLine = book.author ? `<p class="cv-author">${escHtml(book.author)}</p>` : '';
-  const pubLine = book.publisher ? `<p class="cv-meta">${escHtml(book.publisher)}</p>` : '';
-  const langLine = book.base_language ? `<p class="cv-meta">Language: ${escHtml(book.base_language)}</p>` : '';
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const printDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-
-  const html = `<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="UTF-8"><title>${title}</title>
-<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-@page { margin: 2cm 2.5cm; size: A4; }
-body { font-family: 'Hind Siliguri','Lora',Georgia,serif; font-size: 11pt; line-height: 1.72; color: #1a1a1a; }
-h1,h2,h3,h4 { font-family: 'Lora',Georgia,serif; font-weight: 600; line-height: 1.3; }
-p { margin: 0.35em 0; } strong { font-weight: 700; } em { font-style: italic; }
-u { text-decoration: underline; } code { font-family: monospace; background: #f0f0f0; padding: 0.1em 0.3em; font-size: 0.9em; }
-blockquote { border-left: 3px solid #a4501f; margin: 0.5em 0; padding: 0.2em 0.8em; color: #555; }
-ul,ol { padding-left: 1.4em; margin: 0.3em 0; } li { margin: 0.15em 0; }
-hr { border: none; border-top: 1px solid #ddd; margin: 0.5em 0; }
-a { color: #a4501f; }
-figure.doc-img { margin: 0.6em 0; } figure.doc-img img { max-width: 100%; display: block; }
-.cover { min-height: 96vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; page-break-after: always; padding: 2cm; }
-.cover img { max-width: 200px; max-height: 280px; object-fit: contain; margin-bottom: 1.8rem; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
-.cover h1 { font-size: 24pt; margin-bottom: 0.5rem; }
-.cv-author { font-size: 13pt; color: #555; margin-bottom: 0.3rem; }
-.cv-meta { font-size: 9pt; color: #777; font-style: italic; margin-top: 0.25rem; }
-.ornament { font-size: 18pt; color: #a4501f; margin: 1rem 0; }
-.meta-page { page-break-after: always; padding-top: 0.8cm; }
-.meta-page h2 { font-size: 13pt; border-bottom: 1px solid #ccc; padding-bottom: 0.3rem; margin-bottom: 0.7rem; }
-.meta-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
-.meta-table td { padding: 0.3rem 0.5rem; border-bottom: 1px solid #eee; vertical-align: top; }
-.meta-table td:first-child { font-weight: 600; width: 28%; color: #555; }
-.source-list { list-style: disc; padding-left: 1.3em; font-size: 9.5pt; margin-top: 0.3rem; }
-.detail-imgs { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 0.5rem; }
-.detail-img { width: 180px; height: 180px; object-fit: cover; border-radius: 4px; }
-.toc-section { page-break-after: always; padding-top: 0.8cm; }
-.toc-section h2 { font-size: 13pt; border-bottom: 1px solid #ccc; padding-bottom: 0.3rem; margin-bottom: 0.7rem; }
-.toc-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
-.toc-table th { background: #f5f5f5; padding: 0.4rem 0.5rem; text-align: left; border: 1px solid #ddd; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.06em; }
-.toc-table td { padding: 0.32rem 0.5rem; border: 1px solid #eee; vertical-align: top; }
-.toc-sl { width: 5%; text-align: center; color: #999; }
-.toc-title { width: 65%; }
-.toc-book-pg,.toc-pdf-pg { width: 15%; text-align: center; color: #666; font-style: italic; }
-.toc-table tr:nth-child(even) td { background: #fafafa; }
-.finding { padding: 0.65cm 0; border-bottom: 1px solid #e2e2e2; page-break-inside: avoid; }
-.finding:last-child { border-bottom: none; }
-.finding-page { font-size: 7.5pt; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.35rem; }
-.finding-content { font-size: 11pt; line-height: 1.72; }
-.finding-content h1 { font-size: 15pt; margin: 0.4em 0 0.2em; }
-.finding-content h2 { font-size: 13pt; margin: 0.3em 0 0.2em; }
-.finding-content h3 { font-size: 11.5pt; margin: 0.25em 0 0.15em; }
-.heading-imgs { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 0.8rem; }
-.heading-img { max-width: 100%; width: 300px; height: auto; object-fit: contain; display: block; border-radius: 3px; }
-.citation-footer { page-break-before: always; padding-top: 0.8cm; border-top: 1px solid #ccc; font-size: 8pt; color: #888; }
-.citation-footer p { margin-bottom: 0.25rem; }
-@media print { button { display: none !important; } }
-</style></head><body>
-<div class="cover">${coverImg}<h1>${title}</h1>${authorLine}${pubLine}${langLine}<div class="ornament">&#9670;</div><p class="cv-meta">Printed from Sir&#257;jan Mun&#299;r&#257;</p></div>
-<div class="meta-page"><h2>Book Details</h2><table class="meta-table">${metaRows}</table>${sourceLinksHtml}${detailImgsHtml}</div>
-<div class="toc-section"><h2>Table of Contents</h2><table class="toc-table"><thead><tr><th class="toc-sl">#</th><th class="toc-title">Heading / Finding</th><th class="toc-book-pg">Book Page</th><th class="toc-pdf-pg">PDF Page</th></tr></thead><tbody>${tocRows}</tbody></table></div>
-<div class="findings"><h2 style="font-size:14pt;border-bottom:1px solid #ccc;padding-bottom:0.4rem;margin-bottom:0.6cm;">Findings</h2>${headingsHtml}</div>
-<div class="citation-footer"><p>Printed from <strong>Sir&#257;jan Mun&#299;r&#257;</strong> &mdash; ${origin}/book/${book.slug}</p><p>Printed on ${printDate}</p></div>
-<script>window.onload=function(){window.print();}</script>
-</body></html>`;
-
-  const w = window.open('', '_blank');
-  if (w) { w.document.write(html); w.document.close(); }
-}
-
-
-// ---------------------------------------------------------------------------
-// Book form
+// Book form (admin) — unchanged behaviour, inline errors instead of alerts
 // ---------------------------------------------------------------------------
 
 interface BookFormState {
@@ -327,7 +41,7 @@ const EMPTY_FORM: BookFormState = {
 };
 
 function BookForm({ initial, onSave, onCancel }: {
-  initial: (Book & { source_links?: any[] }) | null; onSave: () => void; onCancel: () => void;
+  initial: Book | null; onSave: () => void; onCancel: () => void;
 }) {
   const [form, setForm] = useState<BookFormState>(() =>
     initial
@@ -338,58 +52,65 @@ function BookForm({ initial, onSave, onCancel }: {
           detail_image_urls: initial.detail_image_urls || [],
           description: initial.description, visibility: initial.visibility,
           featured: initial.featured || false,
-          source_links: (initial.source_links || []).map((l: any) => ({ label: l.label, url: l.url })),
+          source_links: (initial.source_links || []).map((l) => ({ label: l.label, url: l.url })),
         }
       : EMPTY_FORM
   );
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState<'cover' | 'detail' | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const uploadCover = async (file: File) => {
-    const url = await uploadImage(file, 'covers');
-    setForm((f) => ({ ...f, cover_image_url: url }));
-  };
-  const uploadDetail = async (file: File) => {
-    const url = await uploadImage(file, 'book-details');
-    setForm((f) => ({ ...f, detail_image_urls: [...f.detail_image_urls, url] }));
+  const upload = async (file: File, kind: 'cover' | 'detail') => {
+    setUploading(kind); setError(null);
+    try {
+      const url = await uploadImage(file, kind === 'cover' ? 'covers' : 'book-details');
+      setForm((f) => kind === 'cover' ? { ...f, cover_image_url: url } : { ...f, detail_image_urls: [...f.detail_image_urls, url] });
+    } catch (e: any) {
+      setError(`Image upload failed: ${e?.message || 'unknown error'}`);
+    } finally {
+      setUploading(null);
+    }
   };
 
   const save = async () => {
-    if (!form.title.trim()) return alert('Title is required.');
-    setSaving(true);
+    if (!form.title.trim()) { setError('Title is required.'); return; }
+    setSaving(true); setError(null);
     try {
       const { source_links, ...bookFields } = form;
       let bookId = initial?.id;
-      if (initial) {
-        await updateBook(initial.id, bookFields);
-      } else {
-        const created = await createBook(bookFields);
-        bookId = created.id;
-      }
+      if (initial) await updateBook(initial.id, bookFields);
+      else bookId = (await createBook(bookFields)).id;
       if (bookId) await replaceSourceLinks(bookId, source_links.filter((l) => l.label && l.url));
       onSave();
     } catch (e: any) {
-      alert(e.message || 'Save failed');
+      setError(e?.message || 'Save failed');
     } finally {
       setSaving(false);
     }
+  };
+
+  const setLink = (i: number, patch: Partial<{ label: string; url: string }>) => {
+    const arr = [...form.source_links]; arr[i] = { ...arr[i], ...patch }; setForm({ ...form, source_links: arr });
   };
 
   return (
     <div className="split-detail book-form">
       <button className="link-btn detail-close" onClick={onCancel}>← Close</button>
       <h3>{initial ? 'Edit book' : 'New book'}</h3>
-      <label>Cover image <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadCover(e.target.files[0])} /></label>
-      {form.cover_image_url && <img src={form.cover_image_url} alt="cover preview" className="cover-preview" />}
-      <label>Title * <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
+      <label>Cover image <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], 'cover')} /></label>
+      {uploading === 'cover' && <p className="muted"><Loader2 size={12} className="spin" /> Uploading…</p>}
+      {form.cover_image_url && <img src={form.cover_image_url} alt="Cover preview" className="cover-preview" />}
+      <label>Title * <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></label>
       <label>Author <input value={form.author} onChange={(e) => setForm({ ...form, author: e.target.value })} /></label>
       <label>Publisher <input value={form.publisher} onChange={(e) => setForm({ ...form, publisher: e.target.value })} /></label>
       <label>Language <input value={form.base_language} onChange={(e) => setForm({ ...form, base_language: e.target.value })} placeholder="Bangla / English / …" /></label>
-      <label>Detail images <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadDetail(e.target.files[0])} /></label>
+      <label>Detail images <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], 'detail')} /></label>
+      {uploading === 'detail' && <p className="muted"><Loader2 size={12} className="spin" /> Uploading…</p>}
       <div className="detail-thumbs">
         {form.detail_image_urls.map((u, i) => (
           <div key={i} className="thumb">
             <img src={u} alt="" />
-            <button onClick={() => setForm((f) => ({ ...f, detail_image_urls: f.detail_image_urls.filter((_, j) => j !== i) }))}>✕</button>
+            <button aria-label="Remove image" onClick={() => setForm((f) => ({ ...f, detail_image_urls: f.detail_image_urls.filter((_, j) => j !== i) }))}>✕</button>
           </div>
         ))}
       </div>
@@ -398,16 +119,17 @@ function BookForm({ initial, onSave, onCancel }: {
       <label>Source links</label>
       {form.source_links.map((l, i) => (
         <div key={i} className="source-link-row">
-          <input placeholder="Label" value={l.label} onChange={(e) => { const arr = [...form.source_links]; arr[i] = { ...arr[i], label: e.target.value }; setForm({ ...form, source_links: arr }); }} />
-          <input placeholder="https://…" value={l.url} onChange={(e) => { const arr = [...form.source_links]; arr[i] = { ...arr[i], url: e.target.value }; setForm({ ...form, source_links: arr }); }} />
-          <button onClick={() => setForm({ ...form, source_links: form.source_links.filter((_, j) => j !== i) })}>✕</button>
+          <input placeholder="Label" aria-label="Link label" value={l.label} onChange={(e) => setLink(i, { label: e.target.value })} />
+          <input placeholder="https://…" aria-label="Link URL" value={l.url} onChange={(e) => setLink(i, { url: e.target.value })} />
+          <button aria-label="Remove link" onClick={() => setForm({ ...form, source_links: form.source_links.filter((_, j) => j !== i) })}>✕</button>
         </div>
       ))}
       <button className="secondary" onClick={() => setForm({ ...form, source_links: [...form.source_links, { label: '', url: '' }] })}>+ Add source link</button>
       <label className="check"><input type="checkbox" checked={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.checked })} /> Visible to guests</label>
       <label className="check"><input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} /> Featured</label>
+      {error && <p className="form-error" role="alert">{error}</p>}
       <div className="modal-actions">
-        <button className="primary" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
+        <button className="primary" disabled={saving || !!uploading} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
         <button className="secondary" onClick={onCancel}>Cancel</button>
       </div>
     </div>
@@ -415,282 +137,279 @@ function BookForm({ initial, onSave, onCancel }: {
 }
 
 // ---------------------------------------------------------------------------
-// Featured book card
+// Admin actions (shared by both card types)
 // ---------------------------------------------------------------------------
 
-function FeaturedBookCard({ book, isAdmin, onEdit, onToggleFeatured, onToggleVisibility, onDelete }: {
-  book: Book; isAdmin: boolean;
-  onEdit: () => void; onToggleFeatured: () => void; onToggleVisibility: () => void; onDelete: () => void;
-}) {
-  const openLightbox = useImageLightbox();
-  const [stats, setStats] = useState<{ headingCount: number; viewCount: number } | null>(null);
-  const [descExpanded, setDescExpanded] = useState(false);
-  const descText = book.description ? docToPlainText(book.description) : '';
-  const descLong = descText.length > 180;
-
-  useEffect(() => { getBookStats(book.id).then(setStats); }, [book.id]);
-
-  const images = [book.cover_image_url, ...(book.detail_image_urls || [])].filter(Boolean) as string[];
-
-  return (
-    <div className={`bk-feat-card ${!book.visibility && isAdmin ? 'bk-feat-card--hidden' : ''}`}>
-      {/* Carousel */}
-      <div className="bk-feat-card__carousel">
-        <ImageCarousel images={images} onImageClick={openLightbox} />
-        {!book.visibility && isAdmin && <div className="bk-feat-card__hidden-badge">Hidden</div>}
-      </div>
-
-      <div className="bk-feat-card__body">
-        <p className="bk-feat-card__label"><Star size={11} fill="currentColor" /> Featured</p>
-        <h2 className="bk-feat-card__title"><Link to={`/book/${book.slug}`}>{book.title}</Link></h2>
-        {book.author && <p className="muted bk-feat-card__author">{book.author}</p>}
-
-        {descText && (
-          <div className="bk-feat-card__desc">
-            <p>{descExpanded || !descLong ? descText : `${descText.slice(0, 180)}…`}</p>
-            {descLong && (
-              <button className="link-btn" onClick={() => setDescExpanded((v) => !v)}>
-                {descExpanded ? 'Read less ↑' : 'Read more ↓'}
-              </button>
-            )}
-          </div>
-        )}
-
-        <div className="bk-feat-card__stats">
-          <span><BookOpen size={14} /> <strong>{stats?.headingCount ?? '—'}</strong> findings</span>
-          <span><Users size={14} /> <strong>{stats?.viewCount ?? '—'}</strong> visits</span>
-          {book.created_at && <span><Calendar size={13} /> {fmtDate(book.created_at)}</span>}
-        </div>
-
-        <div className="bk-feat-card__actions">
-          <Link to={`/book/${book.slug}`} className="col-open-btn">Read <ChevronRight size={13} /></Link>
-          <ThreeDotMenu book={book} />
-          {isAdmin && (
-            <div className="col-admin-actions">
-              <button onClick={onEdit}><Pencil size={12} /> Edit</button>
-              <button onClick={onToggleFeatured}><Star size={12} fill="currentColor" /> Unfeature</button>
-              <button onClick={onToggleVisibility}>{book.visibility ? <EyeOff size={12} /> : <Eye size={12} />} {book.visibility ? 'Hide' : 'Show'}</button>
-              <button className="danger" onClick={onDelete}><Trash2 size={12} /> Delete</button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Featured books carousel
-// ---------------------------------------------------------------------------
-
-function FeaturedCarousel({ featured, isAdmin, onEdit, onToggleFeatured, onToggleVisibility, onDelete }: {
-  featured: Book[]; isAdmin: boolean;
+interface AdminHandlers {
   onEdit: (b: Book) => void; onToggleFeatured: (b: Book) => void;
   onToggleVisibility: (b: Book) => void; onDelete: (b: Book) => void;
-}) {
-  const [idx, setIdx] = useState(0);
-  const total = featured.length;
-  if (total === 0) return null;
-  const prev = () => setIdx((i) => (i - 1 + total) % total);
-  const next = () => setIdx((i) => (i + 1) % total);
+}
 
+function AdminActions({ book, h }: { book: Book; h: AdminHandlers }) {
   return (
-    <div className="col-featured-section">
-      <div className="col-featured-header">
-        <h2 className="col-section-title">Featured Books</h2>
-        {total > 1 && (
-          <div className="col-carousel-nav">
-            <button onClick={prev} className="col-carousel-btn" aria-label="Previous"><ChevronLeft size={16} /></button>
-            <span className="col-carousel-count">{idx + 1} / {total}</span>
-            <button onClick={next} className="col-carousel-btn" aria-label="Next"><ChevronRight size={16} /></button>
-          </div>
-        )}
-      </div>
+    <div className="bs-admin" aria-label="Admin actions">
+      <button onClick={() => h.onEdit(book)}><Pencil size={12} /> Edit</button>
+      <button onClick={() => h.onToggleFeatured(book)}><Star size={12} fill={book.featured ? 'currentColor' : 'none'} /> {book.featured ? 'Unfeature' : 'Feature'}</button>
+      <button onClick={() => h.onToggleVisibility(book)}>{book.visibility ? <EyeOff size={12} /> : <Eye size={12} />} {book.visibility ? 'Hide' : 'Show'}</button>
+      <button className="bs-danger" onClick={() => h.onDelete(book)}><Trash2 size={12} /> Delete</button>
+    </div>
+  );
+}
 
-      <div className="col-carousel-track">
-        {featured.map((book, i) => (
-          <div
-            key={book.id}
-            className={`col-carousel-slide ${i === idx ? 'col-carousel-slide--active' : i === (idx - 1 + total) % total ? 'col-carousel-slide--prev' : 'col-carousel-slide--next'}`}
-            aria-hidden={i !== idx}
-          >
-            <FeaturedBookCard
-              book={book}
-              isAdmin={isAdmin}
-              onEdit={() => onEdit(book)}
-              onToggleFeatured={() => onToggleFeatured(book)}
-              onToggleVisibility={() => onToggleVisibility(book)}
-              onDelete={() => onDelete(book)}
-            />
-          </div>
-        ))}
-      </div>
+function CoverImage({ book, className }: { book: Book; className: string }) {
+  return book.cover_image_url
+    ? <img src={book.cover_image_url} alt="" className={className} loading="lazy" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+    : <span className={`${className} bs-cover-ph`} aria-hidden="true"><BookOpen size={20} /></span>;
+}
 
-      {total > 1 && (
-        <div className="col-carousel-dots">
-          {featured.map((_, i) => (
-            <button key={i} className={`col-carousel-dot ${i === idx ? 'col-carousel-dot--active' : ''}`} onClick={() => setIdx(i)} />
-          ))}
+// ---------------------------------------------------------------------------
+// Featured book — wide card with description and full stats
+// ---------------------------------------------------------------------------
+
+function FeaturedBookCard({ book, stats, isAdmin, h }: { book: Book; stats?: BookStats; isAdmin: boolean; h: AdminHandlers }) {
+  const desc = book.description ? docToPlainText(book.description) : '';
+  const sub = [book.author, book.publisher, book.base_language].filter(Boolean).join(' · ');
+  return (
+    <article className={`bs-feat ${!book.visibility ? 'is-hidden' : ''}`}>
+      <Link to={`/book/${book.slug}`} className="bs-feat-cover" tabIndex={-1} aria-hidden="true">
+        <CoverImage book={book} className="bs-feat-img" />
+      </Link>
+      <div className="bs-feat-body">
+        <div className="bs-feat-top">
+          <span className="bs-badge"><Star size={11} fill="currentColor" /> Featured</span>
+          {!book.visibility && <span className="bs-badge bs-badge--hidden">Hidden</span>}
         </div>
-      )}
+        <h3 className="bs-feat-title"><Link to={`/book/${book.slug}`}>{book.title}</Link></h3>
+        {sub && <p className="bs-sub">{sub}</p>}
+        {desc && <p className="bs-feat-desc">{desc}</p>}
+        <dl className="bs-feat-stats">
+          <div><dt>Findings</dt><dd>{stats ? stats.headingCount : '—'}</dd></div>
+          <div><dt>Visits</dt><dd>{stats ? stats.viewCount : '—'}</dd></div>
+          <div><dt>Added</dt><dd>{fmtDate(book.created_at) || '—'}</dd></div>
+        </dl>
+        <div className="bs-feat-actions">
+          <Link to={`/book/${book.slug}`} className="bs-read">Read <ChevronRight size={14} /></Link>
+          <BookExportMenu book={book} />
+        </div>
+        {isAdmin && <AdminActions book={book} h={h} />}
+      </div>
+    </article>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Regular book — compact grid card
+// ---------------------------------------------------------------------------
+
+function BookCard({ book, stats, isAdmin, h }: { book: Book; stats?: BookStats; isAdmin: boolean; h: AdminHandlers }) {
+  return (
+    <article className={`bs-card ${!book.visibility ? 'is-hidden' : ''}`}>
+      <Link to={`/book/${book.slug}`} className="bs-card-cover" tabIndex={-1} aria-hidden="true">
+        <CoverImage book={book} className="bs-card-img" />
+        {!book.visibility && <span className="bs-badge bs-badge--hidden bs-on-cover">Hidden</span>}
+      </Link>
+      <div className="bs-card-body">
+        <h3 className="bs-card-title"><Link to={`/book/${book.slug}`}>{book.title}</Link></h3>
+        {book.author && <p className="bs-sub">{book.author}</p>}
+        <div className="bs-card-foot">
+          <span className="bs-card-stats">
+            {stats ? plural(stats.headingCount, 'finding') : <span className="skeleton-pulse" style={{ display: 'inline-block', width: 64, height: 10 }} />}
+          </span>
+          <BookExportMenu book={book} />
+        </div>
+        {isAdmin && <AdminActions book={book} h={h} />}
+      </div>
+    </article>
+  );
+}
+
+function FeaturedSkeleton() {
+  return (
+    <div className="bs-feat" aria-hidden="true">
+      <div className="bs-feat-cover"><div className="skeleton-pulse" style={{ width: '100%', aspectRatio: '3 / 4' }} /></div>
+      <div className="bs-feat-body">
+        <div className="skeleton-pulse sk-line sm" style={{ width: 70 }} />
+        <div className="skeleton-pulse sk-line lg" style={{ width: '70%' }} />
+        <div className="skeleton-pulse sk-line sm" style={{ width: '45%', marginBottom: 12 }} />
+        <div className="skeleton-pulse sk-line" style={{ width: '95%' }} />
+        <div className="skeleton-pulse sk-line" style={{ width: '80%' }} />
+      </div>
+    </div>
+  );
+}
+function CardSkeleton() {
+  return (
+    <div className="bs-card" aria-hidden="true">
+      <div className="bs-card-cover"><div className="skeleton-pulse" style={{ width: '100%', aspectRatio: '3 / 4' }} /></div>
+      <div className="bs-card-body">
+        <div className="skeleton-pulse sk-line" style={{ width: '85%' }} />
+        <div className="skeleton-pulse sk-line sm" style={{ width: '55%' }} />
+      </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Book grid card (non-featured)
+// Bookshelf
 // ---------------------------------------------------------------------------
 
-function BookGridCard({ book, isAdmin, onEdit, onToggleFeatured, onToggleVisibility, onDelete }: {
-  book: Book; isAdmin: boolean;
-  onEdit: () => void; onToggleFeatured: () => void; onToggleVisibility: () => void; onDelete: () => void;
-}) {
-  const [stats, setStats] = useState<{ headingCount: number; viewCount: number } | null>(null);
-  useEffect(() => { getBookStats(book.id).then(setStats); }, [book.id]);
-
-  return (
-    <div className={`bk-grid-card ${!book.visibility ? 'bk-grid-card--hidden' : ''}`}>
-      <div className="bk-grid-card__cover-wrap">
-        <Link to={`/book/${book.slug}`}>
-          {book.cover_image_url
-            ? <img src={book.cover_image_url} alt={book.title} className="bk-grid-card__cover" />
-            : <div className="bk-grid-card__cover bk-grid-card__cover--placeholder" />
-          }
-        </Link>
-        <div className="bk-grid-card__overlay">
-          <Link to={`/book/${book.slug}`} className="bk-grid-card__read-btn">Read</Link>
-          <ThreeDotMenu book={book} />
-        </div>
-        {!book.visibility && <span className="bk-grid-card__hidden-chip">Hidden</span>}
-      </div>
-
-      <div className="bk-grid-card__body">
-        <p className="bk-grid-card__title"><Link to={`/book/${book.slug}`}>{book.title}</Link></p>
-        {book.author && <p className="bk-grid-card__author">{book.author}</p>}
-
-        {stats && (
-          <div className="bk-grid-card__stats">
-            <span><BookOpen size={10} /> {stats.headingCount}</span>
-            <span><Users size={10} /> {stats.viewCount}</span>
-          </div>
-        )}
-
-        {book.created_at && (
-          <p className="bk-grid-card__date"><Calendar size={10} /> {fmtDate(book.created_at)}</p>
-        )}
-
-        {isAdmin && (
-          <div className="card-admin-actions bk-grid-card__admin">
-            <button onClick={onEdit} title="Edit"><Pencil size={12} /></button>
-            <button onClick={onToggleFeatured} title={book.featured ? 'Unfeature' : 'Feature'}><Star size={12} fill={book.featured ? 'currentColor' : 'none'} /></button>
-            <button onClick={onToggleVisibility} title={book.visibility ? 'Hide' : 'Show'}>{book.visibility ? <EyeOff size={12} /> : <Eye size={12} />}</button>
-            <button className="danger" onClick={onDelete} title="Delete"><Trash2 size={12} /></button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Bookshelf main
-// ---------------------------------------------------------------------------
+type LoadState = 'loading' | 'more' | 'idle' | 'error';
 
 export default function Bookshelf() {
   const { isAdmin } = useAdmin();
-  const [books, setBooks] = useState<Book[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<Book | null | 'new'>(null);
   useTrackView('site', 'bookshelf');
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    listBooks({ includeHidden: isAdmin })
-      .then(setBooks)
-      .finally(() => setLoading(false));
-  }, [isAdmin]);
+  const [featured, setFeatured] = useState<Book[]>([]);
+  const [featState, setFeatState] = useState<'loading' | 'idle' | 'error'>('loading');
+  const [books, setBooks] = useState<Book[]>([]);
+  const [total, setTotal] = useState(0);
+  const [state, setState] = useState<LoadState>('loading');
+  const [stats, setStats] = useState<Record<string, BookStats>>({});
+  const [editing, setEditing] = useState<Book | 'new' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const reqId = useRef(0);
+  const sentinel = useRef<HTMLDivElement>(null);
 
-  useEffect(reload, [reload]);
+  const loadStats = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    getBookStatsMany(ids).then((s) => setStats((prev) => ({ ...prev, ...s }))).catch(() => {});
+  }, []);
 
-  const toggleVisibility = async (b: Book) => { await updateBook(b.id, { visibility: !b.visibility }); reload(); };
-  const toggleFeatured = async (b: Book) => { await updateBook(b.id, { featured: !b.featured }); reload(); };
-  const remove = async (b: Book) => {
-    if (!confirm(`Delete "${b.title}"? This cannot be undone.`)) return;
-    await deleteBook(b.id); reload();
+  const loadPage = useCallback(async (offset: number) => {
+    const id = ++reqId.current;
+    setState(offset ? 'more' : 'loading');
+    try {
+      const page = await listBooksPage({ includeHidden: isAdmin, featured: false, offset, limit: PAGE_SIZE });
+      if (id !== reqId.current) return;
+      setBooks((prev) => (offset ? [...prev, ...page.rows] : page.rows));
+      setTotal(page.total);
+      setState('idle');
+      loadStats(page.rows.map((b) => b.id));
+    } catch {
+      if (id === reqId.current) setState('error');
+    }
+  }, [isAdmin, loadStats]);
+
+  const loadFeatured = useCallback(async () => {
+    setFeatState('loading');
+    try {
+      const page = await listBooksPage({ includeHidden: isAdmin, featured: true, offset: 0, limit: FEATURED_LIMIT });
+      setFeatured(page.rows);
+      setFeatState('idle');
+      loadStats(page.rows.map((b) => b.id));
+    } catch {
+      setFeatState('error');
+    }
+  }, [isAdmin, loadStats]);
+
+  const reloadAll = useCallback(() => { loadFeatured(); loadPage(0); }, [loadFeatured, loadPage]);
+  useEffect(() => { reloadAll(); }, [reloadAll]);
+
+  // Infinite scroll with a "Load more" button as fallback.
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const obs = new IntersectionObserver((e) => {
+      if (e[0]?.isIntersecting && state === 'idle' && books.length < total) loadPage(books.length);
+    }, { rootMargin: '600px 0px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [state, books.length, total, loadPage]);
+
+  const act = async (fn: () => Promise<void>) => {
+    setActionError(null);
+    try { await fn(); reloadAll(); } catch (e: any) { setActionError(e?.message || 'That change could not be saved.'); }
+  };
+  const handlers: AdminHandlers = {
+    onEdit: (b) => setEditing(b),
+    onToggleFeatured: (b) => act(() => updateBook(b.id, { featured: !b.featured })),
+    onToggleVisibility: (b) => act(() => updateBook(b.id, { visibility: !b.visibility })),
+    onDelete: (b) => { if (confirm(`Delete "${b.title}" and all of its findings? This cannot be undone.`)) act(() => deleteBook(b.id)); },
   };
 
-  const featured = books.filter((b) => b.featured && (b.visibility || isAdmin));
-  const rest = books.filter((b) => !b.featured);
+  const totalBooks = total + featured.length;
+  const nothing = featState === 'idle' && state === 'idle' && featured.length === 0 && books.length === 0;
 
   return (
-    <ImageLightboxProvider>
-      <div className="page bookshelf-page">
-        <style>{BOOKSHELF_CSS}</style>
+    <div className="page bookshelf-page">
+      <style>{BOOKSHELF_CSS}</style>
 
-        <div className="page-head">
+      <div className="page-head bs-head">
+        <div>
           <h1>Bookshelf</h1>
-          {isAdmin && <button className="primary icon-row" onClick={() => setEditing('new')}><Plus size={16} /> New book</button>}
+          <p className="muted bs-intro">
+            {state === 'loading' ? 'Loading books…' : `${plural(totalBooks, 'book')}. `}
+            Open a book to read its findings — each with its page number — then bookmark, copy, or print them.
+          </p>
         </div>
+        {isAdmin && <button className="primary icon-row" onClick={() => setEditing('new')}><Plus size={16} /> New book</button>}
+      </div>
 
-        <div className={`split-view ${editing ? 'has-detail' : ''}`}>
-          <div className="split-list">
-            {/* Featured carousel */}
-            {loading ? (
-              <div className="bk-skeleton-feat-row">
-                <SkeletonCard /><SkeletonCard />
+      {actionError && <p className="form-error" role="alert">{actionError}</p>}
+
+      <div className={`split-view ${editing ? 'has-detail' : ''}`}>
+        <div className="split-list">
+          {/* Featured */}
+          {(featState === 'loading' || featured.length > 0) && (
+            <section className="bs-section" aria-labelledby="bs-featured">
+              <h2 id="bs-featured" className="bs-section-title">Featured</h2>
+              <div className="bs-feat-grid">
+                {featState === 'loading' ? <><FeaturedSkeleton /><FeaturedSkeleton /></>
+                  : featured.map((b) => <FeaturedBookCard key={b.id} book={b} stats={stats[b.id]} isAdmin={isAdmin} h={handlers} />)}
               </div>
-            ) : (
-              featured.length > 0 && (
-                <FeaturedCarousel
-                  featured={featured}
-                  isAdmin={isAdmin}
-                  onEdit={setEditing}
-                  onToggleFeatured={toggleFeatured}
-                  onToggleVisibility={toggleVisibility}
-                  onDelete={remove}
-                />
-              )
-            )}
+            </section>
+          )}
+          {featState === 'error' && (
+            <div className="state-block error"><p>Featured books couldn't be loaded.</p>
+              <div className="state-actions"><button className="link-btn" onClick={loadFeatured}>Retry</button></div></div>
+          )}
 
-            {/* Book grid */}
-            {rest.length > 0 && (
-              <div className="bk-grid-section">
-                {featured.length > 0 && <h2 className="col-section-title col-section-title--secondary">All Books</h2>}
-                {loading ? (
-                  <div className="bk-grid">
-                    {[1, 2, 3, 4, 5, 6].map((i) => <SkeletonCard key={i} />)}
-                  </div>
-                ) : (
-                  <div className="bk-grid">
-                    {rest.map((b) => (
-                      <BookGridCard
-                        key={b.id}
-                        book={b}
-                        isAdmin={isAdmin}
-                        onEdit={() => setEditing(b)}
-                        onToggleFeatured={() => toggleFeatured(b)}
-                        onToggleVisibility={() => toggleVisibility(b)}
-                        onDelete={() => remove(b)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+          {/* All other books */}
+          {(state !== 'idle' || books.length > 0) && (
+            <section className="bs-section" aria-labelledby="bs-all">
+              <h2 id="bs-all" className="bs-section-title">
+                {featured.length ? 'All books' : 'Books'} {total > 0 && <span className="muted">{total}</span>}
+              </h2>
+              {state === 'error' && books.length === 0 ? (
+                <div className="state-block error" role="alert">
+                  <h3>Couldn't load the bookshelf</h3><p>Check your connection and try again.</p>
+                  <div className="state-actions"><button className="primary" onClick={() => loadPage(0)}>Try again</button></div>
+                </div>
+              ) : (
+                <div className="bs-grid">
+                  {books.map((b) => <BookCard key={b.id} book={b} stats={stats[b.id]} isAdmin={isAdmin} h={handlers} />)}
+                  {(state === 'loading' || state === 'more') && Array.from({ length: state === 'loading' ? 6 : 3 }).map((_, i) => <CardSkeleton key={`sk${i}`} />)}
+                </div>
+              )}
+              {books.length > 0 && (
+                <div className="list-status">
+                  {state === 'error' ? (<><span>Couldn't load more books.</span><button className="link-btn" onClick={() => loadPage(books.length)}>Retry</button></>)
+                    : books.length < total ? (state === 'idle' && <button className="load-more-btn" onClick={() => loadPage(books.length)}>Load more ({total - books.length} left)</button>)
+                    : <span>All books shown</span>}
+                </div>
+              )}
+              <div ref={sentinel} aria-hidden="true" style={{ height: 1 }} />
+            </section>
+          )}
 
-            {!loading && books.length === 0 && <p className="muted">No books yet.</p>}
-          </div>
-
-          {editing && (
-            <BookForm
-              initial={editing === 'new' ? null : editing}
-              onSave={() => { setEditing(null); reload(); }}
-              onCancel={() => setEditing(null)}
-            />
+          {nothing && (
+            <div className="state-block">
+              <h3>No books yet</h3>
+              <p>{isAdmin ? 'Add the first book with “New book”.' : 'Books will appear here once they are added.'}</p>
+            </div>
           )}
         </div>
+
+        {editing && (
+          <BookForm
+            key={editing === 'new' ? 'new' : editing.id}
+            initial={editing === 'new' ? null : editing}
+            onSave={() => { setEditing(null); reloadAll(); }}
+            onCancel={() => setEditing(null)}
+          />
+        )}
       </div>
-    </ImageLightboxProvider>
+    </div>
   );
 }
 
@@ -699,133 +418,60 @@ export default function Bookshelf() {
 // ---------------------------------------------------------------------------
 
 const BOOKSHELF_CSS = `
-/* ── Skeleton ─────────────── */
-.bk-skeleton-card {
-  display: flex; flex-direction: column;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; overflow: hidden; padding-bottom: 0.7rem;
-}
-.bk-skeleton__cover {
-  width: 100%; aspect-ratio: 3/4;
-  background: var(--border); animation: skeletonPulse 1.4s ease-in-out infinite;
-}
-.bk-skeleton-feat-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem; }
-@media(max-width:600px){ .bk-skeleton-feat-row{grid-template-columns:1fr;} }
+.bs-head { align-items: flex-end; }
+.bs-intro { margin: 0.25rem 0 0; max-width: 620px; }
+.bs-section { margin-bottom: 2rem; }
+.bs-section-title { font-size: 0.95rem; font-weight: 700; margin: 0 0 0.9rem; display: flex; gap: 0.5rem; align-items: baseline; font-family: var(--font-english), sans-serif; }
+.bs-section-title .muted { font-weight: 400; font-size: 0.8rem; }
 
-/* ── Three-dot menu ──────── */
-.bk-three-dot { position: relative; display: inline-block; }
-.bk-three-dot__btn {
-  width: 30px; height: 30px; border-radius: 50%;
-  border: 1px solid var(--border); background: var(--bg);
-  display: grid; place-items: center; color: var(--muted);
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-.bk-three-dot__btn:hover { border-color: var(--accent); color: var(--accent); background: var(--surface); }
-.bk-three-dot__menu {
-  position: absolute; right: 0; top: 110%; z-index: 100;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.14);
-  min-width: 190px; overflow: hidden;
-  animation: menuFadeIn 0.12s ease;
-}
-@keyframes menuFadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
-.bk-three-dot__menu button {
-  display: flex; align-items: center; gap: 0.5rem;
-  width: 100%; padding: 0.6rem 0.9rem;
-  font-size: 0.84rem; color: var(--fg);
-  border-bottom: 1px solid var(--border);
-  text-align: left; transition: background 0.1s, color 0.1s;
-}
-.bk-three-dot__menu button:last-child { border-bottom: none; }
-.bk-three-dot__menu button:hover { background: color-mix(in srgb, var(--accent) 8%, var(--bg)); color: var(--accent); }
+.bs-badge { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.68rem; font-weight: 600; color: var(--accent); }
+.bs-badge--hidden { color: #c0392b; border: 1px solid currentColor; border-radius: 3px; padding: 0 0.3rem; }
+.bs-sub { margin: 0; font-size: 0.8rem; color: var(--muted); }
+.is-hidden .bs-feat-cover, .is-hidden .bs-card-cover { opacity: 0.55; }
+.bs-cover-ph { display: grid !important; place-items: center; color: var(--muted); background: color-mix(in srgb, var(--fg) 6%, var(--bg)); aspect-ratio: 3 / 4; }
 
-/* ── Featured book card ───── */
-.bk-feat-card {
-  display: grid; grid-template-columns: 1fr 1.25fr;
-  gap: 0; border: 1px solid var(--border); border-radius: 12px;
-  background: var(--surface); overflow: hidden;
-  transition: box-shadow 0.25s, border-color 0.2s;
-  height: 100%;
-}
-.bk-feat-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); box-shadow: 0 8px 28px rgba(0,0,0,0.1); }
-.bk-feat-card--hidden { opacity: 0.6; }
-.bk-feat-card__carousel { position: relative; min-height: 240px; overflow: hidden; background: var(--border); }
-.bk-feat-card__hidden-badge {
-  position: absolute; top: 0.5rem; left: 0.5rem;
-  background: rgba(0,0,0,0.6); color: #fff;
-  font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
-  padding: 0.2rem 0.5rem; border-radius: 4px;
-}
-.bk-feat-card__body {
-  padding: 1.25rem 1.4rem;
-  display: flex; flex-direction: column; gap: 0.55rem;
-}
-.bk-feat-card__label {
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent);
-}
-.bk-feat-card__title { margin: 0; font-size: 1.3rem; }
-.bk-feat-card__title a { text-decoration: none; color: var(--fg); }
-.bk-feat-card__title a:hover { color: var(--accent); }
-.bk-feat-card__author { margin: 0; font-size: 0.88rem; }
-.bk-feat-card__desc { font-size: 0.88rem; color: var(--muted); line-height: 1.65; }
-.bk-feat-card__desc p { margin: 0 0 0.2rem; }
-.bk-feat-card__stats {
-  display: flex; gap: 1rem; flex-wrap: wrap;
-  font-size: 0.8rem; color: var(--muted);
-}
-.bk-feat-card__stats span { display: flex; align-items: center; gap: 0.3rem; }
-.bk-feat-card__stats strong { color: var(--fg); }
-.bk-feat-card__actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: auto; }
+/* Featured: wide, informative */
+.bs-feat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 1rem; }
+.bs-feat { display: flex; gap: 1.1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.bs-feat-cover { flex: 0 0 120px; display: block; align-self: flex-start; }
+.bs-feat-img { display: block; width: 100%; height: auto; border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+.bs-feat-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.bs-feat-top { display: flex; gap: 0.5rem; align-items: center; }
+.bs-feat-title { margin: 0; font-size: 1.15rem; line-height: 1.3; word-break: break-word; }
+.bs-feat-title a, .bs-card-title a { color: var(--fg); text-decoration: none; }
+.bs-feat-title a:hover, .bs-card-title a:hover { color: var(--accent); }
+.bs-feat-desc { margin: 0.2rem 0 0; font-size: 0.86rem; line-height: 1.6; color: color-mix(in srgb, var(--fg) 78%, var(--muted));
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.bs-feat-stats { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: 0.35rem 0 0.2rem; }
+.bs-feat-stats dt { font-size: 0.68rem; color: var(--muted); }
+.bs-feat-stats dd { margin: 0; font-size: 0.92rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bs-feat-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: auto; padding-top: 0.4rem; }
+.bs-read { display: inline-flex; align-items: center; gap: 0.2rem; background: var(--accent); color: #fff; text-decoration: none; font-size: 0.84rem; font-weight: 600; padding: 0.42rem 0.9rem; border-radius: 6px; }
+.bs-read:hover { opacity: 0.9; }
 
-@media(max-width:640px){
-  .bk-feat-card { grid-template-columns: 1fr; }
-  .bk-feat-card__carousel { min-height: 180px; }
-}
+/* Regular: compact grid */
+.bs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1.4rem 1.1rem; }
+.bs-card { display: flex; flex-direction: column; min-width: 0; }
+.bs-card-cover { position: relative; display: block; border-radius: 4px; overflow: hidden; background: var(--border); }
+.bs-card-img { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; transition: opacity 0.15s; }
+.bs-card-cover:hover .bs-card-img { opacity: 0.88; }
+.bs-on-cover { position: absolute; top: 6px; left: 6px; background: var(--surface); }
+.bs-card-body { padding-top: 0.5rem; display: flex; flex-direction: column; gap: 0.15rem; flex: 1; }
+.bs-card-title { margin: 0; font-size: 0.9rem; line-height: 1.35; font-family: var(--font-english), 'Hind Siliguri', sans-serif; font-weight: 600; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bs-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; margin-top: auto; padding-top: 0.3rem; }
+.bs-card-stats { font-size: 0.74rem; color: var(--muted); }
+.bs-card .bx-dots { width: 28px; height: 28px; }
 
-/* ── Book grid ───────────── */
-.bk-grid-section { margin-top: 0.5rem; }
-.bk-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1.25rem;
-}
-@media(max-width:480px){ .bk-grid { grid-template-columns: repeat(2, 1fr); } }
+.bs-admin { display: flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--border); }
+.bs-admin button { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.72rem; color: var(--muted); }
+.bs-admin button:hover { color: var(--accent); }
+.bs-admin .bs-danger:hover { color: #c0392b; }
 
-.bk-grid-card { display: flex; flex-direction: column; }
-.bk-grid-card--hidden .bk-grid-card__cover-wrap { opacity: 0.5; }
-.bk-grid-card__cover-wrap { position: relative; }
-.bk-grid-card__cover-wrap:hover .bk-grid-card__overlay { opacity: 1; }
-.bk-grid-card__cover {
-  width: 100%; aspect-ratio: 3/4; object-fit: cover;
-  border-radius: 6px; display: block;
-  background: var(--border);
+@media (max-width: 560px) {
+  .bs-feat { padding: 0.8rem; gap: 0.8rem; }
+  .bs-feat-cover { flex-basis: 88px; }
+  .bs-feat-title { font-size: 1.02rem; }
+  .bs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem 0.8rem; }
 }
-.bk-grid-card__cover--placeholder { background: var(--border); }
-.bk-grid-card__overlay {
-  position: absolute; inset: 0; border-radius: 6px;
-  background: rgba(0,0,0,0.55);
-  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-  opacity: 0; transition: opacity 0.2s;
-}
-.bk-grid-card__read-btn {
-  background: var(--accent); color: #fff;
-  padding: 0.35rem 0.85rem; border-radius: 5px;
-  font-size: 0.8rem; font-weight: 600; text-decoration: none;
-}
-.bk-grid-card__hidden-chip {
-  position: absolute; top: 0.3rem; right: 0.3rem;
-  background: rgba(0,0,0,0.6); color: #fff;
-  font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.08em;
-  padding: 0.15rem 0.35rem; border-radius: 3px;
-}
-.bk-grid-card__body { padding-top: 0.4rem; }
-.bk-grid-card__title { font-size: 0.88rem; font-weight: 600; margin: 0 0 0.1rem; }
-.bk-grid-card__title a { text-decoration: none; color: var(--fg); }
-.bk-grid-card__title a:hover { color: var(--accent); }
-.bk-grid-card__author { font-size: 0.74rem; color: var(--muted); margin: 0 0 0.2rem; }
-.bk-grid-card__stats { display: flex; gap: 0.7rem; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.2rem; }
-.bk-grid-card__stats span { display: flex; align-items: center; gap: 0.2rem; }
-.bk-grid-card__date { font-size: 0.66rem; color: var(--muted); display: flex; align-items: center; gap: 0.2rem; margin-bottom: 0.2rem; }
-.bk-grid-card__admin { font-size: 0.7rem; }
 `;

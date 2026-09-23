@@ -143,15 +143,18 @@ export function NavBar() {
       <nav className={menuOpen ? 'mobile-open' : ''}>
         <NavLink to="/books" onClick={() => setMenuOpen(false)}>Bookshelf</NavLink>
         <NavLink to="/collections" onClick={() => setMenuOpen(false)}>Collections</NavLink>
+        <NavLink to="/search" onClick={() => setMenuOpen(false)} className={({ isActive }) => `nav-search-link ${isActive ? 'active' : ''}`}>
+          <SearchIcon size={14} aria-hidden="true" /> Search
+        </NavLink>
         {isAdmin && <NavLink to="/drafts" onClick={() => setMenuOpen(false)}>Drafts</NavLink>}
         {isAdmin && <NavLink to="/analytics" onClick={() => setMenuOpen(false)}>Analytics</NavLink>}
         <NavLink to="/about" onClick={() => setMenuOpen(false)}>About</NavLink>
         <NavLink to="/contact" onClick={() => setMenuOpen(false)}>{isAdmin ? 'Inbox' : 'Contact'}</NavLink>
       </nav>
 
-      <form className="nav-search icon-row" onSubmit={submitSearch}>
-        <SearchIcon size={14} className="muted" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" />
+      <form className="nav-search icon-row" role="search" onSubmit={submitSearch}>
+        <SearchIcon size={14} className="muted" aria-hidden="true" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Quick search…" aria-label="Quick search" />
       </form>
 
       <div className="nav-actions">
@@ -244,6 +247,7 @@ export function SiteFooter() {
         <nav>
           <Link to="/books">Bookshelf</Link>
           <Link to="/collections">Collections</Link>
+          <Link to="/search">Search</Link>
           <Link to="/bookmarks">Bookmarks</Link>
           <Link to="/about">About</Link>
           <Link to="/contact">Contact</Link>
@@ -295,5 +299,10 @@ const FOOTER_CSS = `
 .footer-last-edit { font-size: 0.72rem; color: var(--muted); }
 @media(max-width: 720px) {
   .nav-search { display: none; }
+}
+.site-nav nav a.nav-search-link { display: inline-flex; align-items: center; gap: 0.3rem; }
+.site-nav nav a.nav-search-link svg { width: 14px; height: 14px; }
+@media(max-width: 720px) {
+  .site-nav nav a.nav-search-link { padding: 0.55rem 0; }
 }
 `;

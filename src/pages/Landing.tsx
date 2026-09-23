@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   BookOpen, FolderOpen, Bookmark, Search, ShieldCheck, Printer,
   Inbox as InboxIcon, ArrowRight, Star, Plus, Pencil, Trash2, X,
@@ -7,6 +7,7 @@ import {
 import { useAdmin, useTrackView } from '../lib/context';
 import { Book, Category, getLiveStats, listBooks, listCategories, getSiteSetting, setSiteSetting } from '../lib/supabase';
 import { ContactForm } from './StaticPages';
+import { SearchBox } from '../components/SearchBox';
 
 // ---------------------------------------------------------------------------
 // Animated Hero SVG
@@ -384,7 +385,7 @@ function RotatingQuotes({ quotes }: { quotes: ShelfQuote[] }) {
 const FEATURES = [
   { icon: BookOpen, title: 'Deep-linkable findings', body: 'Every heading is its own permanent, shareable page.' },
   { icon: FolderOpen, title: 'Curated collections', body: 'Findings gathered by theme across authors.' },
-  { icon: Search, title: 'Full-text search', body: "Search reaches inside every finding's body." },
+  { icon: Search, title: 'Search by meaning', body: 'Ask in Bangla or English — semantic search finds the passage, keyword search finds the exact words.' },
   { icon: Bookmark, title: 'Private bookmarks', body: 'Stored only in your browser, never on a server.' },
   { icon: ShieldCheck, title: 'No accounts', body: 'Browse anonymously. Nothing to sign up for.' },
   { icon: Printer, title: 'Print-ready', body: 'Clean print layout with cover and source citation.' },
@@ -454,6 +455,7 @@ export default function Landing() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [quotes, setQuotes] = useState<ShelfQuote[]>([]);
   const [showQuoteManager, setShowQuoteManager] = useState(false);
+  const navigate = useNavigate();
   useTrackView('site', 'landing');
 
   useEffect(() => {
@@ -474,6 +476,10 @@ export default function Landing() {
           <h1>Sirājan Munīrā</h1>
           <p className="tagline">A Collection of Findings from Sunni-Classified Sources</p>
           <p className="tagline-sub">…and a luminous lamp.</p>
+          <div className="lnd-search">
+            <SearchBox onSubmit={(q) => navigate(`/search?q=${encodeURIComponent(q)}`)} label="Search the archive" />
+            <p className="lnd-search-hint">Search by meaning in Bangla or English, or by exact words.</p>
+          </div>
           <div className="hero-cta">
             <Link to="/books" className="cta-primary"><BookOpen size={16} /> Bookshelf</Link>
             <Link to="/collections" className="cta-secondary"><FolderOpen size={16} /> Collections</Link>
@@ -604,11 +610,16 @@ export default function Landing() {
 }
 
 const LANDING_CSS = `
+.lnd-search { margin-top: 1.4rem; max-width: 520px; }
+.lnd-search-hint { font-size: .76rem; color: var(--muted); margin: .45rem 0 0; }
+@media(max-width:720px){ .landing-feature{ margin:0; padding:.6rem 0; } }
+.lnd-hero .hero-cta { justify-content: flex-start; margin-top: 1.2rem; }
+@media(max-width:600px){ .lnd-search{ margin-left:auto; margin-right:auto; width:100%; } .lnd-search-hint{ text-align:center; } .lnd-hero .hero-cta{ justify-content:center; } .lnd-hero__left{ width:100%; } }
 .lnd-hero { display:flex; align-items:center; justify-content:space-between; gap:1.5rem; flex-wrap:wrap; text-align:left; padding:3.5rem 1.4rem 2.8rem; }
 .lnd-hero__left { max-width:480px; }
 .lnd-hero__right { flex-shrink:0; }
 .lnd-eyebrow { font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.2em; color:var(--accent); margin-bottom:.5rem; }
-@media(max-width:600px){ .lnd-hero{flex-direction:column;text-align:center;align-items:center;} .lnd-hero__right{display:none;} }
+@media(max-width:600px){ .lnd-hero{flex-direction:column;text-align:center;align-items:center;} .lnd-hero__right{display:block;} }
 
 .lnd-stats-bar { display:flex; align-items:center; justify-content:center; gap:0; padding:.9rem 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
 .lnd-stat { text-align:center; padding:0 1.8rem; }

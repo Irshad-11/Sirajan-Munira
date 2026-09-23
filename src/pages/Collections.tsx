@@ -1,14 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  Plus, Pencil, Trash2, ExternalLink, ChevronRight, Star,
-  Eye, EyeOff, BookOpen, BarChart2, Calendar, RefreshCw,
-  ChevronLeft, Layers, Hash,
+  Plus, Pencil, Trash2, ExternalLink, ChevronRight, Star, Eye, EyeOff, Loader2, ArrowLeft,
 } from 'lucide-react';
 import {
-  Category, CategoryHeadingDetail, CategoryStats,
-  createCategory, deleteCategory, getCategoryStats,
-  listCategories, listCategoryHeadings, updateCategory, uploadImage,
+  Category, CategoryHeadingDetail, CategoryStats, createCategory, deleteCategory, getCategory,
+  getCategoryStatsMany, listCategoriesPage, listCategoryItemsPage, requestIndexing, updateCategory, uploadImage,
 } from '../lib/supabase';
 import { useAdmin, useTrackView } from '../lib/context';
 import { RichTextView, docToPlainText } from '../lib/richtext';
@@ -17,47 +14,33 @@ import { RichTextView, docToPlainText } from '../lib/richtext';
 // Helpers
 // ---------------------------------------------------------------------------
 
+const LIST_PAGE = 20;
+const ITEM_PAGE = 12;
+
 function fmtDate(d?: string) {
-  if (!d) return '—';
+  if (!d) return '';
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
+function plural(n: number, one: string, many = `${one}s`) { return `${n} ${n === 1 ? one : many}`; }
 
-function SkeletonCard() {
-  return (
-    <div className="col-skeleton-card">
-      <div className="col-skeleton__img skeleton-pulse" />
-      <div className="col-skeleton__body">
-        <div className="skeleton-pulse" style={{ width: '60%', height: 16, marginBottom: 8 }} />
-        <div className="skeleton-pulse" style={{ width: '90%', height: 11, marginBottom: 4 }} />
-        <div className="skeleton-pulse" style={{ width: '70%', height: 11, marginBottom: 14 }} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div className="skeleton-pulse" style={{ width: 55, height: 11 }} />
-          <div className="skeleton-pulse" style={{ width: 55, height: 11 }} />
-        </div>
-      </div>
-    </div>
-  );
+function statsLine(s?: CategoryStats) {
+  if (!s) return null;
+  return `${plural(s.entryCount, 'finding')} from ${plural(s.bookCount, 'book')} · ${plural(s.viewCount, 'visit')}`;
 }
 
-function SkeletonRow() {
-  return (
-    <div className="col-skeleton-row">
-      <div className="col-skeleton__thumb skeleton-pulse" />
-      <div className="col-skeleton__row-body">
-        <div className="skeleton-pulse" style={{ width: '45%', height: 14, marginBottom: 6 }} />
-        <div className="skeleton-pulse" style={{ width: '75%', height: 11 }} />
-      </div>
-    </div>
-  );
+/** Title = first block of the finding; excerpt = the text after it. */
+function splitHeading(content: any, fallbackTitle?: string) {
+  const blocks = content?.content || [];
+  const title = (fallbackTitle || docToPlainText({ type: 'doc', content: blocks.slice(0, 1) })).trim();
+  const body = docToPlainText({ type: 'doc', content: blocks.slice(1) }).trim();
+  return { title: title || 'Untitled finding', body };
 }
 
 // ---------------------------------------------------------------------------
-// Category edit form
+// Collection form (admin)
 // ---------------------------------------------------------------------------
 
-function CategoryForm({ initial, onSave, onCancel }: {
-  initial: Category | null; onSave: () => void; onCancel: () => void;
-}) {
+function CategoryForm({ initial, onSave, onCancel }: { initial: Category | null; onSave: () => void; onCancel: () => void; }) {
   const [name, setName] = useState(initial?.name || '');
   const [color, setColor] = useState(initial?.color || '#6b5b95');
   const [banner, setBanner] = useState(initial?.banner_image_url || '');
@@ -65,16 +48,26 @@ function CategoryForm({ initial, onSave, onCancel }: {
   const [featured, setFeatured] = useState(initial?.featured || false);
   const [visibility, setVisibility] = useState(initial?.visibility ?? true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const uploadBanner = async (file: File) => setBanner(await uploadImage(file, 'category-banners'));
+  const uploadBanner = async (file: File) => {
+    setUploading(true); setError(null);
+    try { setBanner(await uploadImage(file, 'category-banners')); }
+    catch (e: any) { setError(`Image upload failed: ${e?.message || 'unknown error'}`); }
+    finally { setUploading(false); }
+  };
 
   const save = async () => {
-    if (!name.trim()) return alert('Name is required.');
-    setSaving(true);
+    if (!name.trim()) { setError('Name is required.'); return; }
+    setSaving(true); setError(null);
     try {
-      if (initial) await updateCategory(initial.id, { name, color, banner_image_url: banner, description, featured, visibility });
-      else await createCategory({ name, color, banner_image_url: banner, description, featured, visibility });
+      const patch = { name, color, banner_image_url: banner, description, featured, visibility };
+      if (initial) await updateCategory(initial.id, patch); else await createCategory(patch);
+      requestIndexing();
       onSave();
+    } catch (e: any) {
+      setError(e?.message || 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -84,21 +77,17 @@ function CategoryForm({ initial, onSave, onCancel }: {
     <div className="split-detail">
       <button className="link-btn detail-close" onClick={onCancel}>← Close</button>
       <h3>{initial ? 'Edit collection' : 'New collection'}</h3>
-      <label>Name <input value={name} onChange={(e) => setName(e.target.value)} /></label>
+      <label>Name <input value={name} onChange={(e) => setName(e.target.value)} required /></label>
       <label>Color <input type="color" value={color} onChange={(e) => setColor(e.target.value)} /></label>
       <label>Banner image <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadBanner(e.target.files[0])} /></label>
-      {banner && <img src={banner} alt="" className="cover-preview" />}
+      {uploading && <p className="muted"><Loader2 size={12} className="spin" /> Uploading…</p>}
+      {banner && <img src={banner} alt="Banner preview" className="cover-preview" />}
       <label>Description <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} /></label>
-      <label className="check">
-        <input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} />
-        Featured (shown as card)
-      </label>
-      <label className="check">
-        <input type="checkbox" checked={visibility} onChange={(e) => setVisibility(e.target.checked)} />
-        Visible to guests
-      </label>
+      <label className="check"><input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} /> Featured</label>
+      <label className="check"><input type="checkbox" checked={visibility} onChange={(e) => setVisibility(e.target.checked)} /> Visible to guests</label>
+      {error && <p className="form-error" role="alert">{error}</p>}
       <div className="modal-actions">
-        <button className="primary" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
+        <button className="primary" disabled={saving || uploading} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
         <button className="secondary" onClick={onCancel}>Cancel</button>
       </div>
     </div>
@@ -106,351 +95,240 @@ function CategoryForm({ initial, onSave, onCancel }: {
 }
 
 // ---------------------------------------------------------------------------
-// Stats chip
+// Admin row actions
 // ---------------------------------------------------------------------------
 
-function StatsRow({ stats }: { stats: CategoryStats | null }) {
-  if (!stats) return null;
-  return (
-    <div className="col-card__stats">
-      <span title="Total entries"><Layers size={12} /> {stats.entryCount}</span>
-      <span title="Books"><BookOpen size={12} /> {stats.bookCount}</span>
-      <span title="Visits"><BarChart2 size={12} /> {stats.viewCount}</span>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Featured collection card (in carousel)
-// ---------------------------------------------------------------------------
-
-function FeaturedCollectionCard({ category, isAdmin, onEdit, onToggleFeatured, onToggleVisibility, onDelete }: {
-  category: Category; isAdmin: boolean;
-  onEdit: () => void; onToggleFeatured: () => void; onToggleVisibility: () => void; onDelete: () => void;
-}) {
-  const [stats, setStats] = useState<CategoryStats | null>(null);
-  const [descExpanded, setDescExpanded] = useState(false);
-  const desc = category.description || '';
-  const descLong = desc.length > 120;
-
-  useEffect(() => { getCategoryStats(category.id).then(setStats); }, [category.id]);
-
-  return (
-    <div className={`col-feat-card ${!category.visibility && isAdmin ? 'col-feat-card--hidden' : ''}`}>
-      {/* Banner */}
-      <div className="col-feat-card__img-wrap">
-        {category.banner_image_url ? (
-          <img src={category.banner_image_url} alt="" className="col-feat-card__img" />
-        ) : (
-          <div className="col-feat-card__img-placeholder">
-            <span className="col-feat-card__dot" style={{ background: category.color }} />
-          </div>
-        )}
-        {!category.visibility && isAdmin && (
-          <div className="col-feat-card__hidden-badge">Hidden</div>
-        )}
-      </div>
-
-      {/* Body */}
-      <div className="col-feat-card__body">
-        <p className="col-feat-card__label">
-          <Star size={11} fill="currentColor" /> Featured
-        </p>
-        <h3 className="col-feat-card__title">
-          <span className="dot" style={{ background: category.color }} />
-          <Link to={`/collections/${category.id}`}>{category.name}</Link>
-        </h3>
-
-        {desc && (
-          <div className="col-feat-card__desc">
-            <p>{descExpanded || !descLong ? desc : `${desc.slice(0, 120)}…`}</p>
-            {descLong && (
-              <button className="link-btn col-readmore-btn" onClick={() => setDescExpanded((v) => !v)}>
-                {descExpanded ? 'Read less ↑' : 'Read more ↓'}
-              </button>
-            )}
-          </div>
-        )}
-
-        <StatsRow stats={stats} />
-
-        <div className="col-feat-card__meta">
-          {category.created_at && (
-            <span><Calendar size={11} /> {fmtDate(category.created_at)}</span>
-          )}
-          {category.updated_at && category.updated_at !== category.created_at && (
-            <span><RefreshCw size={11} /> {fmtDate(category.updated_at)}</span>
-          )}
-        </div>
-
-        <div className="col-feat-card__actions">
-          <Link to={`/collections/${category.id}`} className="col-open-btn">
-            Open <ChevronRight size={13} />
-          </Link>
-          {isAdmin && (
-            <div className="col-admin-actions">
-              <button onClick={onEdit}><Pencil size={12} /> Edit</button>
-              <button onClick={onToggleFeatured}><Star size={12} fill="currentColor" /> Unfeature</button>
-              <button onClick={onToggleVisibility}>{category.visibility ? <EyeOff size={12} /> : <Eye size={12} />} {category.visibility ? 'Hide' : 'Show'}</button>
-              <button className="danger" onClick={onDelete}><Trash2 size={12} /> Delete</button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Featured collections carousel
-// ---------------------------------------------------------------------------
-
-function FeaturedCarousel({ featured, isAdmin, onEdit, onToggleFeatured, onToggleVisibility, onDelete }: {
-  featured: Category[]; isAdmin: boolean;
+interface AdminHandlers {
   onEdit: (c: Category) => void; onToggleFeatured: (c: Category) => void;
   onToggleVisibility: (c: Category) => void; onDelete: (c: Category) => void;
-}) {
-  const [idx, setIdx] = useState(0);
-  const total = featured.length;
+}
 
-  const prev = () => setIdx((i) => (i - 1 + total) % total);
-  const next = () => setIdx((i) => (i + 1) % total);
-
-  if (total === 0) return null;
-
+function AdminActions({ c, h }: { c: Category; h: AdminHandlers }) {
   return (
-    <div className="col-featured-section">
-      <div className="col-featured-header">
-        <h2 className="col-section-title">Featured Collections</h2>
-        {total > 1 && (
-          <div className="col-carousel-nav">
-            <button onClick={prev} className="col-carousel-btn" aria-label="Previous"><ChevronLeft size={16} /></button>
-            <span className="col-carousel-count">{idx + 1} / {total}</span>
-            <button onClick={next} className="col-carousel-btn" aria-label="Next"><ChevronRight size={16} /></button>
-          </div>
-        )}
-      </div>
-
-      <div className="col-carousel-track">
-        {featured.map((cat, i) => (
-          <div
-            key={cat.id}
-            className={`col-carousel-slide ${i === idx ? 'col-carousel-slide--active' : i === (idx - 1 + total) % total ? 'col-carousel-slide--prev' : 'col-carousel-slide--next'}`}
-            aria-hidden={i !== idx}
-          >
-            <FeaturedCollectionCard
-              category={cat}
-              isAdmin={isAdmin}
-              onEdit={() => onEdit(cat)}
-              onToggleFeatured={() => onToggleFeatured(cat)}
-              onToggleVisibility={() => onToggleVisibility(cat)}
-              onDelete={() => onDelete(cat)}
-            />
-          </div>
-        ))}
-      </div>
-
-      {total > 1 && (
-        <div className="col-carousel-dots">
-          {featured.map((_, i) => (
-            <button key={i} className={`col-carousel-dot ${i === idx ? 'col-carousel-dot--active' : ''}`} onClick={() => setIdx(i)} aria-label={`Go to ${i + 1}`} />
-          ))}
-        </div>
-      )}
+    <div className="cl-admin" aria-label="Admin actions">
+      <button onClick={() => h.onEdit(c)}><Pencil size={12} /> Edit</button>
+      <button onClick={() => h.onToggleFeatured(c)}><Star size={12} fill={c.featured ? 'currentColor' : 'none'} /> {c.featured ? 'Unfeature' : 'Feature'}</button>
+      <button onClick={() => h.onToggleVisibility(c)}>{c.visibility ? <EyeOff size={12} /> : <Eye size={12} />} {c.visibility ? 'Hide' : 'Show'}</button>
+      <button className="cl-danger" onClick={() => h.onDelete(c)}><Trash2 size={12} /> Delete</button>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Non-featured list row
+// Featured collection — card with banner
 // ---------------------------------------------------------------------------
 
-function CollectionRow({ category, isAdmin, onEdit, onToggleFeatured, onToggleVisibility, onDelete }: {
-  category: Category; isAdmin: boolean;
-  onEdit: () => void; onToggleFeatured: () => void; onToggleVisibility: () => void; onDelete: () => void;
-}) {
-  const [stats, setStats] = useState<CategoryStats | null>(null);
-  const [descExpanded, setDescExpanded] = useState(false);
-  const desc = category.description || '';
-  const descLong = desc.length > 100;
-
-  useEffect(() => { getCategoryStats(category.id).then(setStats); }, [category.id]);
-
+function FeaturedCard({ c, stats, isAdmin, h }: { c: Category; stats?: CategoryStats; isAdmin: boolean; h: AdminHandlers }) {
   return (
-    <div className={`col-row ${!category.visibility && isAdmin ? 'col-row--hidden' : ''}`}>
-      {/* Thumbnail */}
-      <div className="col-row__thumb-wrap">
-        {category.banner_image_url ? (
-          <img src={category.banner_image_url} alt="" className="col-row__thumb" />
-        ) : (
-          <div className="col-row__thumb-placeholder">
-            <span style={{ background: category.color, width: 20, height: 20, borderRadius: '50%', display: 'block' }} />
-          </div>
-        )}
+    <article className={`cl-feat ${!c.visibility ? 'is-hidden' : ''}`} style={{ ['--cc' as any]: c.color }}>
+      <Link to={`/collections/${c.id}`} className="cl-feat-banner" tabIndex={-1} aria-hidden="true">
+        {c.banner_image_url ? <img src={c.banner_image_url} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} /> : <span className="cl-feat-banner-ph" />}
+      </Link>
+      <div className="cl-feat-body">
+        <div className="cl-feat-top">
+          <span className="cl-badge"><Star size={11} fill="currentColor" /> Featured</span>
+          {!c.visibility && <span className="cl-badge cl-badge--hidden">Hidden</span>}
+        </div>
+        <h3 className="cl-feat-title"><Link to={`/collections/${c.id}`}>{c.name}</Link></h3>
+        {c.description && <p className="cl-feat-desc">{c.description}</p>}
+        <p className="cl-stats">
+          {stats ? statsLine(stats) : <span className="skeleton-pulse" style={{ display: 'inline-block', width: 180, height: 10 }} />}
+        </p>
+        <div className="cl-feat-foot">
+          <Link to={`/collections/${c.id}`} className="cl-open">Open collection <ChevronRight size={14} /></Link>
+          {c.updated_at && <span className="muted cl-date">Updated {fmtDate(c.updated_at)}</span>}
+        </div>
+        {isAdmin && <AdminActions c={c} h={h} />}
       </div>
+    </article>
+  );
+}
 
-      {/* Body */}
-      <div className="col-row__body">
-        <div className="col-row__title-row">
-          <span className="dot" style={{ background: category.color }} />
-          <Link to={`/collections/${category.id}`} className="col-row__title">{category.name}</Link>
-          {!category.visibility && isAdmin && <span className="badge">Hidden</span>}
-          {category.featured && <span className="col-row__feat-chip"><Star size={10} fill="currentColor" /> featured</span>}
-        </div>
+// ---------------------------------------------------------------------------
+// Regular collection — plain row
+// ---------------------------------------------------------------------------
 
-        {desc && (
-          <div className="col-row__desc">
-            <span>{descExpanded || !descLong ? desc : `${desc.slice(0, 100)}…`}</span>
-            {descLong && (
-              <button className="link-btn col-readmore-btn" onClick={() => setDescExpanded((v) => !v)}>
-                {descExpanded ? ' less' : ' more'}
-              </button>
-            )}
-          </div>
-        )}
+function CollectionRow({ c, stats, isAdmin, h }: { c: Category; stats?: CategoryStats; isAdmin: boolean; h: AdminHandlers }) {
+  return (
+    <li className={`cl-row ${!c.visibility ? 'is-hidden' : ''}`}>
+      <Link to={`/collections/${c.id}`} className="cl-row-link">
+        <span className="cl-row-dot" style={{ background: c.color }} aria-hidden="true" />
+        <span className="cl-row-main">
+          <span className="cl-row-title">
+            {c.name}
+            {!c.visibility && <span className="cl-badge cl-badge--hidden">Hidden</span>}
+          </span>
+          {c.description && <span className="cl-row-desc">{c.description}</span>}
+          <span className="cl-stats">{stats ? statsLine(stats) : ' '}</span>
+        </span>
+        <ChevronRight size={16} className="cl-row-chev" aria-hidden="true" />
+      </Link>
+      {isAdmin && <AdminActions c={c} h={h} />}
+    </li>
+  );
+}
 
-        <div className="col-row__meta-row">
-          {stats && (
-            <>
-              <span title="Entries"><Layers size={11} /> {stats.entryCount}</span>
-              <span title="Books"><BookOpen size={11} /> {stats.bookCount}</span>
-              <span title="Visits"><BarChart2 size={11} /> {stats.viewCount}</span>
-            </>
-          )}
-          {category.created_at && (
-            <span className="col-row__date"><Calendar size={11} /> {fmtDate(category.created_at)}</span>
-          )}
-        </div>
-
-        <div className="row-actions">
-          <Link to={`/collections/${category.id}`} className="link-btn icon-row"><ChevronRight size={13} /> Open</Link>
-          {isAdmin && (
-            <>
-              <button className="link-btn icon-row" onClick={onEdit}><Pencil size={13} /> Edit</button>
-              <button className="link-btn icon-row" onClick={onToggleFeatured}>
-                <Star size={13} fill={category.featured ? 'currentColor' : 'none'} /> Feature
-              </button>
-              <button className="link-btn icon-row" onClick={onToggleVisibility}>
-                {category.visibility ? <EyeOff size={13} /> : <Eye size={13} />} {category.visibility ? 'Hide' : 'Show'}
-              </button>
-              <button className="link-btn icon-row danger" onClick={onDelete}><Trash2 size={13} /> Delete</button>
-            </>
-          )}
-        </div>
+function RowSkeleton() {
+  return (
+    <li className="cl-row" aria-hidden="true">
+      <div className="cl-row-link">
+        <span className="skeleton-pulse cl-row-dot" />
+        <span className="cl-row-main" style={{ width: '100%' }}>
+          <span className="skeleton-pulse sk-line lg" style={{ width: '40%', display: 'block' }} />
+          <span className="skeleton-pulse sk-line" style={{ width: '75%', display: 'block' }} />
+          <span className="skeleton-pulse sk-line sm" style={{ width: '30%', display: 'block' }} />
+        </span>
+      </div>
+    </li>
+  );
+}
+function FeatSkeleton() {
+  return (
+    <div className="cl-feat" aria-hidden="true">
+      <div className="cl-feat-banner"><span className="skeleton-pulse" style={{ display: 'block', width: '100%', height: '100%' }} /></div>
+      <div className="cl-feat-body">
+        <div className="skeleton-pulse sk-line lg" style={{ width: '60%' }} />
+        <div className="skeleton-pulse sk-line" style={{ width: '90%' }} />
+        <div className="skeleton-pulse sk-line sm" style={{ width: '40%' }} />
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// CollectionsList
+// Collections list
 // ---------------------------------------------------------------------------
 
 export function CollectionsList() {
   const { isAdmin } = useAdmin();
-  const [cats, setCats] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<Category | 'new' | null>(null);
   useTrackView('site', 'collections');
 
-  const reload = useCallback(async () => {
-    setLoading(true);
+  const [featured, setFeatured] = useState<Category[]>([]);
+  const [featState, setFeatState] = useState<'loading' | 'idle' | 'error'>('loading');
+  const [rows, setRows] = useState<Category[]>([]);
+  const [total, setTotal] = useState(0);
+  const [state, setState] = useState<'loading' | 'more' | 'idle' | 'error'>('loading');
+  const [stats, setStats] = useState<Record<string, CategoryStats>>({});
+  const [editing, setEditing] = useState<Category | 'new' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const reqId = useRef(0);
+  const sentinel = useRef<HTMLDivElement>(null);
+
+  const loadStats = useCallback((ids: string[]) => {
+    if (ids.length) getCategoryStatsMany(ids).then((s) => setStats((p) => ({ ...p, ...s }))).catch(() => {});
+  }, []);
+
+  const loadFeatured = useCallback(async () => {
+    setFeatState('loading');
     try {
-      const rows = await listCategories({ includeHidden: isAdmin });
-      setCats(rows);
-    } finally {
-      setLoading(false);
-    }
-  }, [isAdmin]);
+      const page = await listCategoriesPage({ includeHidden: isAdmin, featured: true, offset: 0, limit: 24 });
+      setFeatured(page.rows); setFeatState('idle'); loadStats(page.rows.map((c) => c.id));
+    } catch { setFeatState('error'); }
+  }, [isAdmin, loadStats]);
 
-  useEffect(() => { reload(); }, [reload]);
+  const loadPage = useCallback(async (offset: number) => {
+    const id = ++reqId.current;
+    setState(offset ? 'more' : 'loading');
+    try {
+      const page = await listCategoriesPage({ includeHidden: isAdmin, featured: false, offset, limit: LIST_PAGE });
+      if (id !== reqId.current) return;
+      setRows((p) => (offset ? [...p, ...page.rows] : page.rows));
+      setTotal(page.total); setState('idle'); loadStats(page.rows.map((c) => c.id));
+    } catch { if (id === reqId.current) setState('error'); }
+  }, [isAdmin, loadStats]);
 
-  const remove = async (c: Category) => {
-    if (!confirm(`Delete collection "${c.name}"?`)) return;
-    await deleteCategory(c.id);
-    reload();
+  const reloadAll = useCallback(() => { loadFeatured(); loadPage(0); }, [loadFeatured, loadPage]);
+  useEffect(() => { reloadAll(); }, [reloadAll]);
+
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const obs = new IntersectionObserver((e) => {
+      if (e[0]?.isIntersecting && state === 'idle' && rows.length < total) loadPage(rows.length);
+    }, { rootMargin: '500px 0px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [state, rows.length, total, loadPage]);
+
+  const act = async (fn: () => Promise<void>) => {
+    setActionError(null);
+    try { await fn(); reloadAll(); } catch (e: any) { setActionError(e?.message || 'That change could not be saved.'); }
+  };
+  const h: AdminHandlers = {
+    onEdit: setEditing,
+    onToggleFeatured: (c) => act(() => updateCategory(c.id, { featured: !c.featured })),
+    onToggleVisibility: (c) => act(() => updateCategory(c.id, { visibility: !c.visibility })),
+    onDelete: (c) => { if (confirm(`Delete collection "${c.name}"? The findings themselves are kept.`)) act(() => deleteCategory(c.id)); },
   };
 
-  const toggleFeatured = async (c: Category) => {
-    await updateCategory(c.id, { featured: !c.featured });
-    reload();
-  };
-
-  const toggleVisibility = async (c: Category) => {
-    await updateCategory(c.id, { visibility: !c.visibility });
-    reload();
-  };
-
-  const featured = cats.filter((c) => c.featured && (c.visibility || isAdmin));
-  const rest = cats.filter((c) => !c.featured);
+  const nothing = featState === 'idle' && state === 'idle' && featured.length === 0 && rows.length === 0;
+  const count = total + featured.length;
 
   return (
-    <div className="page">
+    <div className="page collections-page">
       <style>{COLLECTIONS_CSS}</style>
-
-      <div className="page-head">
-        <h1>Collections</h1>
-        {isAdmin && (
-          <button className="primary icon-row" onClick={() => setEditing('new')}>
-            <Plus size={16} /> New collection
-          </button>
-        )}
+      <div className="page-head cl-head">
+        <div>
+          <h1>Collections</h1>
+          <p className="muted cl-intro">
+            {state === 'loading' ? 'Loading collections…' : `${plural(count, 'collection')}. `}
+            Each collection gathers findings on one theme from across different books.
+          </p>
+        </div>
+        {isAdmin && <button className="primary icon-row" onClick={() => setEditing('new')}><Plus size={16} /> New collection</button>}
       </div>
+      {actionError && <p className="form-error" role="alert">{actionError}</p>}
 
       <div className={`split-view ${editing ? 'has-detail' : ''}`}>
         <div className="split-list">
-
-          {/* Featured carousel */}
-          {loading ? (
-            <div className="col-feat-skeleton-row">
-              <SkeletonCard />
-              <SkeletonCard />
-            </div>
-          ) : featured.length > 0 && (
-            <FeaturedCarousel
-              featured={featured}
-              isAdmin={isAdmin}
-              onEdit={setEditing}
-              onToggleFeatured={toggleFeatured}
-              onToggleVisibility={toggleVisibility}
-              onDelete={remove}
-            />
-          )}
-
-          {/* Non-featured list */}
-          {rest.length > 0 && (
-            <div className="col-list-section">
-              {featured.length > 0 && <h2 className="col-section-title col-section-title--secondary">All Collections</h2>}
-              <div className="col-list">
-                {loading
-                  ? [1, 2, 3].map((i) => <SkeletonRow key={i} />)
-                  : rest.map((c) => (
-                    <CollectionRow
-                      key={c.id}
-                      category={c}
-                      isAdmin={isAdmin}
-                      onEdit={() => setEditing(c)}
-                      onToggleFeatured={() => toggleFeatured(c)}
-                      onToggleVisibility={() => toggleVisibility(c)}
-                      onDelete={() => remove(c)}
-                    />
-                  ))
-                }
+          {(featState === 'loading' || featured.length > 0) && (
+            <section className="cl-section" aria-labelledby="cl-featured">
+              <h2 id="cl-featured" className="cl-section-title">Featured</h2>
+              <div className="cl-feat-grid">
+                {featState === 'loading' ? <><FeatSkeleton /><FeatSkeleton /></>
+                  : featured.map((c) => <FeaturedCard key={c.id} c={c} stats={stats[c.id]} isAdmin={isAdmin} h={h} />)}
               </div>
-            </div>
+            </section>
+          )}
+          {featState === 'error' && (
+            <div className="state-block error"><p>Featured collections couldn't be loaded.</p>
+              <div className="state-actions"><button className="link-btn" onClick={loadFeatured}>Retry</button></div></div>
           )}
 
-          {!loading && cats.length === 0 && (
-            <p className="muted">No collections yet.</p>
+          {(state !== 'idle' || rows.length > 0) && (
+            <section className="cl-section" aria-labelledby="cl-all">
+              <h2 id="cl-all" className="cl-section-title">{featured.length ? 'All collections' : 'Collections'} {total > 0 && <span className="muted">{total}</span>}</h2>
+              {state === 'error' && rows.length === 0 ? (
+                <div className="state-block error" role="alert">
+                  <h3>Couldn't load collections</h3>
+                  <div className="state-actions"><button className="primary" onClick={() => loadPage(0)}>Try again</button></div>
+                </div>
+              ) : (
+                <ul className="cl-list">
+                  {rows.map((c) => <CollectionRow key={c.id} c={c} stats={stats[c.id]} isAdmin={isAdmin} h={h} />)}
+                  {(state === 'loading' || state === 'more') && Array.from({ length: state === 'loading' ? 4 : 2 }).map((_, i) => <RowSkeleton key={`s${i}`} />)}
+                </ul>
+              )}
+              {rows.length > 0 && (
+                <div className="list-status">
+                  {state === 'error' ? (<><span>Couldn't load more.</span><button className="link-btn" onClick={() => loadPage(rows.length)}>Retry</button></>)
+                    : rows.length < total ? (state === 'idle' && <button className="load-more-btn" onClick={() => loadPage(rows.length)}>Load more ({total - rows.length} left)</button>)
+                    : null}
+                </div>
+              )}
+              <div ref={sentinel} aria-hidden="true" style={{ height: 1 }} />
+            </section>
+          )}
+
+          {nothing && (
+            <div className="state-block"><h3>No collections yet</h3>
+              <p>{isAdmin ? 'Create one with “New collection”, then add findings to it from any book page.' : 'Collections will appear here once they are created.'}</p></div>
           )}
         </div>
 
         {editing && (
-          <CategoryForm
-            initial={editing === 'new' ? null : editing}
-            onSave={() => { setEditing(null); reload(); }}
-            onCancel={() => setEditing(null)}
-          />
+          <CategoryForm key={editing === 'new' ? 'new' : editing.id} initial={editing === 'new' ? null : editing}
+            onSave={() => { setEditing(null); reloadAll(); }} onCancel={() => setEditing(null)} />
         )}
       </div>
     </div>
@@ -458,175 +336,183 @@ export function CollectionsList() {
 }
 
 // ---------------------------------------------------------------------------
-// CategoryDetail
+// Collection detail
 // ---------------------------------------------------------------------------
+
+function ItemSkeleton() {
+  return (
+    <li className="cd-item" aria-hidden="true">
+      <div className="cd-item-main">
+        <div className="skeleton-pulse sk-line lg" style={{ width: '55%' }} />
+        <div className="skeleton-pulse sk-line" style={{ width: '95%' }} />
+        <div className="skeleton-pulse sk-line" style={{ width: '80%' }} />
+        <div className="skeleton-pulse sk-line sm" style={{ width: '35%', marginTop: 8 }} />
+      </div>
+    </li>
+  );
+}
 
 export function CategoryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isAdmin } = useAdmin();
   const [category, setCategory] = useState<Category | null>(null);
-  const [items, setItems] = useState<CategoryHeadingDetail[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [expandedExcerpt, setExpandedExcerpt] = useState<string | null>(null);
-  const [selected, setSelected] = useState<CategoryHeadingDetail | null>(null);
+  const [catState, setCatState] = useState<'loading' | 'ready' | 'notfound' | 'error'>('loading');
   const [stats, setStats] = useState<CategoryStats | null>(null);
+  const [items, setItems] = useState<CategoryHeadingDetail[]>([]);
+  const [total, setTotal] = useState(0);
+  const [state, setState] = useState<'loading' | 'more' | 'idle' | 'error'>('loading');
+  const [selected, setSelected] = useState<CategoryHeadingDetail | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [descExpanded, setDescExpanded] = useState(false);
+  const reqId = useRef(0);
+  const sentinel = useRef<HTMLDivElement>(null);
   useTrackView('category', id ?? null);
 
-  useEffect(() => {
+  const loadItems = useCallback(async (offset: number) => {
     if (!id) return;
-    setSelected(null);
-    setLoading(true);
-    Promise.all([
-      listCategories({ includeHidden: true }),
-      listCategoryHeadings(id),
-      getCategoryStats(id),
-    ]).then(([cats, headings, s]) => {
-      setCategory(cats.find((c) => c.id === id) || null);
-      setItems(headings);
-      setStats(s);
-    }).finally(() => setLoading(false));
+    const rid = ++reqId.current;
+    setState(offset ? 'more' : 'loading');
+    try {
+      const page = await listCategoryItemsPage(id, offset, ITEM_PAGE);
+      if (rid !== reqId.current) return;
+      setItems((p) => (offset ? [...p, ...page.rows] : page.rows));
+      setTotal(page.total); setState('idle');
+    } catch { if (rid === reqId.current) setState('error'); }
   }, [id]);
 
+  const load = useCallback(async () => {
+    if (!id) return;
+    setSelected(null); setItems([]); setCatState('loading');
+    loadItems(0);
+    try {
+      const c = await getCategory(id);
+      if (!c || (!c.visibility && !isAdmin)) { setCatState('notfound'); return; }
+      setCategory(c); setCatState('ready');
+      getCategoryStatsMany([id]).then((s) => setStats(s[id] || null)).catch(() => {});
+    } catch { setCatState('error'); }
+  }, [id, loadItems, isAdmin]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const obs = new IntersectionObserver((e) => {
+      if (e[0]?.isIntersecting && state === 'idle' && items.length < total) loadItems(items.length);
+    }, { rootMargin: '600px 0px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [state, items.length, total, loadItems]);
+
+  if (catState === 'notfound') {
+    return <div className="page"><div className="state-block"><h3>Collection not found</h3><p>It may have been removed or hidden.</p>
+      <div className="state-actions"><button className="primary" onClick={() => navigate('/collections')}>All collections</button></div></div></div>;
+  }
+  if (catState === 'error') {
+    return <div className="page"><div className="state-block error" role="alert"><h3>Couldn't load this collection</h3>
+      <div className="state-actions"><button className="primary" onClick={load}>Try again</button></div></div></div>;
+  }
+
   const desc = category?.description || '';
-  const descLong = desc.length > 200;
+  const descLong = desc.length > 240;
 
   return (
     <div className="page collection-detail-page">
       <style>{COLLECTIONS_CSS}</style>
 
-      <div className="page-head">
-        <div>
-          <button className="link-btn" onClick={() => navigate('/collections')}>← Collections</button>
-          <h1>{category?.name || '…'}</h1>
-
-          {desc && (
-            <div className="col-detail-desc">
-              <p className="muted">{descExpanded || !descLong ? desc : `${desc.slice(0, 200)}…`}</p>
-              {descLong && (
-                <button className="link-btn col-readmore-btn" onClick={() => setDescExpanded((v) => !v)}>
-                  {descExpanded ? 'Read less ↑' : 'Read more ↓'}
-                </button>
-              )}
-            </div>
-          )}
-
-          {stats && (
-            <div className="col-detail-stats">
-              <span><Layers size={13} /> <strong>{stats.entryCount}</strong> entries</span>
-              <span><BookOpen size={13} /> <strong>{stats.bookCount}</strong> books</span>
-              <span><BarChart2 size={13} /> <strong>{stats.viewCount}</strong> visits</span>
-              {category?.created_at && (
-                <span><Calendar size={13} /> Created {fmtDate(category.created_at)}</span>
-              )}
-              {category?.updated_at && category.updated_at !== category.created_at && (
-                <span><RefreshCw size={13} /> Updated {fmtDate(category.updated_at)}</span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      <header className="cd-head" style={category ? { ['--cc' as any]: category.color } : undefined}>
+        <Link to="/collections" className="cd-back"><ArrowLeft size={14} /> Collections</Link>
+        {catState === 'loading' ? (
+          <>
+            <div className="skeleton-pulse sk-line" style={{ width: '45%', height: 28, margin: '0.4rem 0 0.8rem' }} />
+            <div className="skeleton-pulse sk-line" style={{ width: '70%' }} />
+          </>
+        ) : category && (
+          <>
+            <h1 className="cd-title"><span className="cd-title-dot" aria-hidden="true" />{category.name}</h1>
+            {desc && (
+              <div className="cd-desc">
+                <p>{descExpanded || !descLong ? desc : `${desc.slice(0, 240)}…`}</p>
+                {descLong && <button className="link-btn" onClick={() => setDescExpanded((v) => !v)} aria-expanded={descExpanded}>{descExpanded ? 'Read less' : 'Read more'}</button>}
+              </div>
+            )}
+            <p className="cl-stats cd-stats">
+              {stats ? statsLine(stats) : <span className="skeleton-pulse" style={{ display: 'inline-block', width: 200, height: 10 }} />}
+              {category.updated_at && <> · Updated {fmtDate(category.updated_at)}</>}
+            </p>
+          </>
+        )}
+      </header>
 
       <div className={`split-view ${selected ? 'has-detail' : ''}`}>
-        <div className="split-list col-detail-list">
-          {loading ? (
-            <>
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="col-detail-skeleton">
-                  <div className="skeleton-pulse" style={{ width: 48, height: 64, flexShrink: 0, borderRadius: 4 }} />
-                  <div style={{ flex: 1 }}>
-                    <div className="skeleton-pulse" style={{ width: '50%', height: 14, marginBottom: 6 }} />
-                    <div className="skeleton-pulse" style={{ width: '80%', height: 11, marginBottom: 4 }} />
-                    <div className="skeleton-pulse" style={{ width: '60%', height: 11 }} />
-                  </div>
-                </div>
-              ))}
-            </>
-          ) : items.length === 0 ? (
-            <p className="muted">No headings in this collection yet.</p>
+        <div className="split-list">
+          {state === 'error' && items.length === 0 ? (
+            <div className="state-block error" role="alert"><h3>Couldn't load the findings</h3>
+              <div className="state-actions"><button className="primary" onClick={() => loadItems(0)}>Try again</button></div></div>
+          ) : state === 'idle' && items.length === 0 ? (
+            <div className="state-block"><h3>No findings in this collection yet</h3><p>Findings are added to a collection from their book page.</p></div>
           ) : (
-            items.map(({ heading, book }) => {
-              const excerpt = docToPlainText(heading.content).slice(0, 200);
-              const expanded = expandedExcerpt === heading.id;
-              const isActive = selected?.heading.id === heading.id;
-
-              return (
-                <div
-                  key={heading.id}
-                  className={`col-detail-item ${isActive ? 'col-detail-item--active' : ''}`}
-                  onClick={() => setSelected({ heading, book })}
-                >
-                  {/* Book cover */}
-                  {book.cover_image_url ? (
-                    <img src={book.cover_image_url} alt="" className="col-detail-cover" />
-                  ) : (
-                    <div className="col-detail-cover-placeholder" />
-                  )}
-
-                  <div className="col-detail-body">
-                    {/* Book name + page */}
-                    <div className="col-detail-book-row">
-                      <span className="col-detail-book-name">{book.title}</span>
-                      {book.author && <span className="col-detail-author"> — {book.author}</span>}
-                      {heading.page_number && (
-                        <span className="col-detail-page">
-                          <Hash size={10} /> p. {heading.page_number}
-                        </span>
+            <ul className="cd-list">
+              {items.map((it) => {
+                const { heading, book } = it;
+                const { title, body } = splitHeading(heading.content);
+                const isOpen = !!expanded[heading.id];
+                const isActive = selected?.heading.id === heading.id;
+                const href = `/book/${book.slug}#${heading.id}`;
+                return (
+                  <li key={heading.id} className={`cd-item ${isActive ? 'is-active' : ''}`}>
+                    <div className="cd-item-main">
+                      <h2 className="cd-item-title"><Link to={href}>{title}</Link></h2>
+                      {body && (
+                        <p className={`cd-item-excerpt ${isOpen ? 'open' : ''}`}>{body}</p>
                       )}
+                      <p className="cd-item-meta">
+                        {book.cover_image_url && <img src={book.cover_image_url} alt="" className="cd-item-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                        <span className="cd-item-book">{book.title}</span>
+                        {book.author && <span>{book.author}</span>}
+                        {heading.page_number && <span>p. {heading.page_number}</span>}
+                      </p>
+                      <div className="cd-item-actions">
+                        {body.length > 220 && (
+                          <button className="link-btn" onClick={() => setExpanded((m) => ({ ...m, [heading.id]: !isOpen }))} aria-expanded={isOpen}>
+                            {isOpen ? 'Show less' : 'Show more'}
+                          </button>
+                        )}
+                        <button className="link-btn" onClick={() => setSelected(it)}>Preview</button>
+                        <Link className="link-btn" to={href}>Read in book</Link>
+                        <Link className="link-btn cd-newtab" to={href} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> New tab</Link>
+                      </div>
                     </div>
-
-                    {/* Excerpt */}
-                    <p className="col-detail-excerpt">
-                      {expanded ? docToPlainText(heading.content) : excerpt}
-                      {excerpt.length >= 200 && !expanded ? '…' : ''}
-                    </p>
-
-                    <div className="row-actions">
-                      {excerpt.length >= 200 && (
-                        <button className="link-btn" onClick={(e) => { e.stopPropagation(); setExpandedExcerpt(expanded ? null : heading.id); }}>
-                          {expanded ? 'less' : 'read more'}
-                        </button>
-                      )}
-                      <button className="link-btn icon-row" onClick={(e) => { e.stopPropagation(); setSelected({ heading, book }); }}>
-                        <ChevronRight size={13} /> Preview
-                      </button>
-                      <Link
-                        className="link-btn icon-row"
-                        to={`/book/${book.slug}#${heading.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <ExternalLink size={13} /> New tab
-                      </Link>
-                      <Link
-                        className="link-btn icon-row"
-                        to={`/book/${book.slug}#${heading.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Read
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
+                  </li>
+                );
+              })}
+              {(state === 'loading' || state === 'more') && Array.from({ length: state === 'loading' ? 4 : 2 }).map((_, i) => <ItemSkeleton key={`s${i}`} />)}
+            </ul>
           )}
+          {items.length > 0 && (
+            <div className="list-status">
+              {state === 'error' ? (<><span>Couldn't load more findings.</span><button className="link-btn" onClick={() => loadItems(items.length)}>Retry</button></>)
+                : items.length < total ? (state === 'idle' && <button className="load-more-btn" onClick={() => loadItems(items.length)}>Load more ({total - items.length} left)</button>)
+                : <span>All {plural(total, 'finding')} shown</span>}
+            </div>
+          )}
+          <div ref={sentinel} aria-hidden="true" style={{ height: 1 }} />
         </div>
 
-        {/* Preview panel */}
         {selected && (
-          <div className="split-detail">
+          <div className="split-detail cd-preview">
             <button className="link-btn detail-close" onClick={() => setSelected(null)}>← Close</button>
             <div className="side-panel-head">
               <div>
-                <h3>{selected.book.title}</h3>
-                <p className="muted">{selected.book.author}</p>
+                <p className="cd-preview-book">{selected.book.title}</p>
+                <p className="muted" style={{ margin: 0 }}>
+                  {[selected.book.author, selected.heading.page_number ? `p. ${selected.heading.page_number}` : null].filter(Boolean).join(' · ')}
+                </p>
               </div>
               <div className="side-panel-actions">
-                <Link to={`/book/${selected.book.slug}#${selected.heading.id}`} target="_blank" rel="noopener noreferrer" className="icon-row">
-                  <ExternalLink size={14} /> New tab
-                </Link>
+                <Link to={`/book/${selected.book.slug}#${selected.heading.id}`} className="icon-row">Read in book <ChevronRight size={14} /></Link>
+                <button className="icon-btn" onClick={() => setSelected(null)} aria-label="Close preview">✕</button>
               </div>
             </div>
             <RichTextView doc={selected.heading.content} />
@@ -638,234 +524,84 @@ export function CategoryDetail() {
 }
 
 // ---------------------------------------------------------------------------
-// CSS for Collections
+// CSS
 // ---------------------------------------------------------------------------
 
 const COLLECTIONS_CSS = `
-/* ── Skeleton ─────────────── */
-.skeleton-pulse {
-  background: color-mix(in srgb, var(--border) 80%, var(--fg) 20%);
-  border-radius: 4px;
-  animation: skeletonPulse 1.4s ease-in-out infinite;
-}
-@keyframes skeletonPulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.cl-head { align-items: flex-end; }
+.cl-intro { margin: 0.25rem 0 0; max-width: 620px; }
+.cl-section { margin-bottom: 2rem; }
+.cl-section-title { font-size: 0.95rem; font-weight: 700; margin: 0 0 0.9rem; display: flex; gap: 0.5rem; align-items: baseline; font-family: var(--font-english), sans-serif; }
+.cl-section-title .muted { font-weight: 400; font-size: 0.8rem; }
+.cl-badge { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.68rem; font-weight: 600; color: var(--accent); }
+.cl-badge--hidden { color: #c0392b; border: 1px solid currentColor; border-radius: 3px; padding: 0 0.3rem; margin-left: 0.4rem; }
+.cl-stats { margin: 0; font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.is-hidden { opacity: 0.7; }
 
-.col-skeleton-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.col-skeleton__img { height: 180px; background: var(--border); animation: skeletonPulse 1.4s ease-in-out infinite; }
-.col-skeleton__body { padding: 1rem; }
-.col-skeleton-row {
-  display: flex; gap: 0.8rem; padding: 0.75rem 0;
-  border-bottom: 1px solid var(--border);
-}
-.col-skeleton__thumb { width: 52px; height: 52px; border-radius: 6px; flex-shrink: 0; animation: skeletonPulse 1.4s ease-in-out infinite; background: var(--border); }
-.col-skeleton__row-body { flex: 1; }
-.col-feat-skeleton-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem; }
-@media(max-width:600px){ .col-feat-skeleton-row{grid-template-columns:1fr;} }
+/* Featured: banner card */
+.cl-feat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 1rem; }
+.cl-feat { display: flex; flex-direction: column; border: 1px solid var(--border); border-top: 3px solid var(--cc, var(--accent)); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.cl-feat-banner { display: block; aspect-ratio: 16 / 7; background: color-mix(in srgb, var(--cc, var(--accent)) 14%, var(--bg)); }
+.cl-feat-banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cl-feat-banner-ph { display: block; width: 100%; height: 100%; }
+.cl-feat-body { padding: 0.9rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.35rem; flex: 1; }
+.cl-feat-title { margin: 0; font-size: 1.1rem; line-height: 1.3; word-break: break-word; }
+.cl-feat-title a { color: var(--fg); text-decoration: none; }
+.cl-feat-title a:hover { color: var(--accent); }
+.cl-feat-desc { margin: 0; font-size: 0.86rem; line-height: 1.6; color: color-mix(in srgb, var(--fg) 78%, var(--muted));
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cl-feat-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; margin-top: auto; padding-top: 0.5rem; }
+.cl-open { display: inline-flex; align-items: center; gap: 0.2rem; background: var(--accent); color: #fff; text-decoration: none; font-size: 0.84rem; font-weight: 600; padding: 0.42rem 0.9rem; border-radius: 6px; }
+.cl-open:hover { opacity: 0.9; }
+.cl-date { font-size: 0.74rem; }
 
-/* ── Section titles ─────────── */
-.col-section-title {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--fg);
-  margin: 0 0 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.col-section-title--secondary { margin-top: 2rem; }
+/* Regular: rows */
+.cl-list, .cd-list { list-style: none; margin: 0; padding: 0; }
+.cl-row { border-bottom: 1px solid var(--border); }
+.cl-row-link { display: flex; align-items: flex-start; gap: 0.8rem; padding: 0.85rem 0.4rem; color: inherit; text-decoration: none; border-radius: 6px; }
+a.cl-row-link:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+a.cl-row-link:hover .cl-row-title { color: var(--accent); }
+.cl-row-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 0.45rem; }
+.cl-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.cl-row-title { font-weight: 700; font-size: 0.98rem; }
+.cl-row-desc { font-size: 0.85rem; color: color-mix(in srgb, var(--fg) 75%, var(--muted)); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cl-row-chev { color: var(--muted); flex-shrink: 0; margin-top: 0.3rem; }
+.cl-admin { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; padding: 0 0.4rem 0.7rem 1.9rem; }
+.cl-feat .cl-admin { padding: 0.4rem 0 0; border-top: 1px dashed var(--border); margin-top: 0.4rem; }
+.cl-admin button { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.72rem; color: var(--muted); }
+.cl-admin button:hover { color: var(--accent); }
+.cl-admin .cl-danger:hover { color: #c0392b; }
 
-/* ── Featured card ──────────── */
-.col-featured-section { margin-bottom: 2rem; }
-.col-featured-header {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 1rem;
-}
-.col-carousel-nav { display: flex; align-items: center; gap: 0.5rem; }
-.col-carousel-btn {
-  width: 30px; height: 30px; border-radius: 50%;
-  border: 1px solid var(--border); background: var(--surface);
-  display: grid; place-items: center; color: var(--fg);
-  transition: border-color 0.15s, color 0.15s;
-}
-.col-carousel-btn:hover { border-color: var(--accent); color: var(--accent); }
-.col-carousel-count { font-size: 0.78rem; color: var(--muted); }
+/* Detail */
+.cd-head { padding: 0.2rem 0 1rem; margin-bottom: 0.8rem; border-bottom: 1px solid var(--border); }
+.cd-back { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; color: var(--muted); text-decoration: none; }
+.cd-back:hover { color: var(--accent); }
+.cd-title { margin: 0.45rem 0 0.5rem; font-size: 1.6rem; font-weight: 800; line-height: 1.25; display: flex; align-items: center; gap: 0.55rem; word-break: break-word; }
+.cd-title-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--cc, var(--accent)); flex-shrink: 0; }
+.cd-desc p { margin: 0 0 0.25rem; max-width: 720px; color: color-mix(in srgb, var(--fg) 78%, var(--muted)); }
+.cd-stats { margin-top: 0.5rem; }
 
-.col-carousel-track { position: relative; overflow: hidden; min-height: 340px; }
-.col-carousel-slide {
-  position: absolute; inset: 0;
-  transition: transform 0.45s cubic-bezier(.4,0,.2,1), opacity 0.45s;
-  opacity: 0; pointer-events: none;
-  transform: translateX(100%);
-}
-.col-carousel-slide--active { opacity: 1; pointer-events: auto; transform: translateX(0); }
-.col-carousel-slide--prev { transform: translateX(-100%); }
-.col-carousel-slide--next { transform: translateX(100%); }
+.cd-list { max-width: 780px; }
+.cd-item { border-bottom: 1px solid var(--border); }
+.cd-item.is-active { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.cd-item-main { padding: 1rem 0.4rem; }
+.cd-item-title { margin: 0 0 0.35rem; font-size: 1.06rem; font-weight: 700; line-height: 1.4; font-family: var(--font-serif), 'Hind Siliguri', Georgia, serif; word-break: break-word; }
+.cd-item-title a { color: var(--fg); text-decoration: none; }
+.cd-item-title a:hover { color: var(--accent); }
+.cd-item-excerpt { margin: 0 0 0.5rem; font-size: 0.9rem; line-height: 1.65; color: color-mix(in srgb, var(--fg) 80%, var(--muted));
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cd-item-excerpt.open { display: block; -webkit-line-clamp: unset; }
+.cd-item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.5rem; margin: 0 0 0.4rem; font-size: 0.78rem; color: var(--muted); }
+.cd-item-meta span + span::before { content: '·'; margin-right: 0.5rem; }
+.cd-item-cover { width: 18px; height: 24px; object-fit: cover; border-radius: 2px; }
+.cd-item-book { color: var(--fg); font-weight: 600; }
+.cd-item-actions { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.8rem; }
+.cd-item-actions .link-btn { display: inline-flex; align-items: center; gap: 0.25rem; }
+.cd-preview-book { margin: 0; font-weight: 700; }
 
-.col-carousel-dots {
-  display: flex; justify-content: center; gap: 0.4rem; margin-top: 0.8rem;
-}
-.col-carousel-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--border); padding: 0;
-  transition: background 0.2s, transform 0.2s;
-}
-.col-carousel-dot--active { background: var(--accent); transform: scale(1.35); }
-
-.col-feat-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 0;
-  transition: box-shadow 0.25s, border-color 0.2s;
-  height: 100%;
-}
-.col-feat-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); box-shadow: 0 8px 28px rgba(0,0,0,0.1); }
-.col-feat-card--hidden { opacity: 0.6; }
-
-.col-feat-card__img-wrap { position: relative; min-height: 200px; }
-.col-feat-card__img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.col-feat-card__img-placeholder {
-  width: 100%; height: 100%; min-height: 200px;
-  background: color-mix(in srgb, var(--border) 70%, var(--bg));
-  display: grid; place-items: center;
-}
-.col-feat-card__hidden-badge {
-  position: absolute; top: 0.5rem; left: 0.5rem;
-  background: rgba(0,0,0,0.6); color: #fff;
-  font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
-  padding: 0.2rem 0.5rem; border-radius: 4px;
-}
-.col-feat-card__dot {
-  width: 40px; height: 40px; border-radius: 50%; display: block;
-}
-
-.col-feat-card__body { padding: 1.2rem 1.3rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.col-feat-card__label {
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em;
-  color: var(--accent);
-}
-.col-feat-card__title { margin: 0; font-size: 1.2rem; line-height: 1.3; }
-.col-feat-card__title a { text-decoration: none; color: var(--fg); }
-.col-feat-card__title a:hover { color: var(--accent); }
-
-.col-feat-card__desc { font-size: 0.88rem; color: var(--muted); line-height: 1.65; }
-.col-feat-card__desc p { margin: 0 0 0.2rem; }
-.col-readmore-btn { font-size: 0.78rem; }
-
-.col-feat-card__stats {
-  display: flex; gap: 1rem;
-  font-size: 0.78rem; color: var(--muted);
-}
-.col-feat-card__stats span { display: flex; align-items: center; gap: 0.25rem; }
-
-.col-feat-card__meta {
-  display: flex; gap: 0.8rem; flex-wrap: wrap;
-  font-size: 0.72rem; color: var(--muted);
-}
-.col-feat-card__meta span { display: flex; align-items: center; gap: 0.25rem; }
-
-.col-feat-card__actions { margin-top: auto; }
-.col-open-btn {
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  background: var(--accent); color: #fff;
-  padding: 0.45rem 1rem; border-radius: 6px;
-  font-size: 0.82rem; font-weight: 600; text-decoration: none;
-  transition: opacity 0.15s;
-  margin-bottom: 0.5rem;
-}
-.col-open-btn:hover { opacity: 0.88; }
-.col-admin-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; font-size: 0.72rem; margin-top: 0.3rem; }
-.col-admin-actions button { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--muted); border-bottom: 1px solid transparent; }
-.col-admin-actions button:hover { color: var(--accent); border-bottom-color: var(--accent); }
-.col-admin-actions button.danger:hover { color: #c0392b; border-bottom-color: #c0392b; }
-
-@media(max-width: 640px) {
-  .col-feat-card { grid-template-columns: 1fr; }
-  .col-feat-card__img-wrap { min-height: 160px; max-height: 200px; }
-}
-
-/* ── Non-featured list row ─── */
-.col-list-section { margin-top: 1rem; }
-.col-list { display: flex; flex-direction: column; }
-.col-row {
-  display: flex; gap: 0.9rem;
-  padding: 0.85rem 0;
-  border-bottom: 1px solid var(--border);
-  transition: background 0.15s;
-}
-.col-row--hidden { opacity: 0.55; }
-.col-row__thumb-wrap { flex-shrink: 0; }
-.col-row__thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; display: block; }
-.col-row__thumb-placeholder {
-  width: 56px; height: 56px; border-radius: 6px;
-  background: var(--border); display: grid; place-items: center;
-}
-.col-row__body { flex: 1; min-width: 0; }
-.col-row__title-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.25rem; }
-.col-row__title { font-weight: 600; font-size: 0.95rem; color: var(--fg); text-decoration: none; }
-.col-row__title:hover { color: var(--accent); }
-.col-row__feat-chip {
-  display: inline-flex; align-items: center; gap: 0.2rem;
-  font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  padding: 0.1rem 0.35rem; border-radius: 4px;
-}
-.col-row__desc { font-size: 0.84rem; color: var(--muted); margin-bottom: 0.35rem; line-height: 1.55; }
-.col-row__meta-row {
-  display: flex; gap: 0.8rem; flex-wrap: wrap;
-  font-size: 0.72rem; color: var(--muted); margin-bottom: 0.35rem;
-}
-.col-row__meta-row span { display: flex; align-items: center; gap: 0.25rem; }
-.col-row__date { font-style: italic; }
-
-/* ── Collection detail list ── */
-.col-detail-list { max-width: 760px; }
-.col-detail-stats {
-  display: flex; gap: 1.2rem; flex-wrap: wrap;
-  font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem;
-}
-.col-detail-stats span { display: flex; align-items: center; gap: 0.3rem; }
-.col-detail-stats strong { color: var(--fg); }
-.col-detail-desc { margin: 0.4rem 0; }
-.col-detail-desc p { margin: 0 0 0.25rem; font-size: 0.88rem; }
-
-.col-detail-skeleton { display: flex; gap: 0.8rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
-
-.col-detail-item {
-  display: flex; gap: 0.9rem;
-  padding: 0.85rem 0.6rem;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.12s;
-}
-.col-detail-item:hover { background: color-mix(in srgb, var(--accent) 5%, var(--bg)); }
-.col-detail-item--active { background: color-mix(in srgb, var(--accent) 8%, var(--bg)); border-left: 3px solid var(--accent); padding-left: 0.9rem; }
-
-.col-detail-cover { width: 48px; height: 64px; object-fit: cover; flex-shrink: 0; border-radius: 4px; display: block; }
-.col-detail-cover-placeholder { width: 48px; height: 64px; flex-shrink: 0; border-radius: 4px; background: var(--border); }
-.col-detail-body { flex: 1; min-width: 0; }
-.col-detail-book-row { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
-.col-detail-book-name { font-weight: 700; font-size: 0.92rem; color: var(--fg); }
-.col-detail-author { font-size: 0.82rem; color: var(--muted); }
-.col-detail-page { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.72rem; color: var(--muted); border: 1px solid var(--border); padding: 0.1rem 0.35rem; border-radius: 4px; }
-.col-detail-excerpt { font-size: 0.86rem; color: var(--muted); line-height: 1.55; margin: 0 0 0.4rem; }
-
-@media(max-width:640px){
-  .col-feat-card__body { padding: 1rem; }
-  .col-carousel-track { min-height: 400px; }
+@media (max-width: 560px) {
+  .cd-title { font-size: 1.3rem; }
+  .cl-admin { padding-left: 0.4rem; }
+  .cd-newtab { display: none !important; }
 }
 `;

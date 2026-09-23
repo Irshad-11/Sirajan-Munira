@@ -1,0 +1,151 @@
+/* ===========================================================================
+   Sirājan Munīrā — shared UI pieces (imported once in main.tsx)
+   Skeletons, highlight colours, search box, list states, book export bar.
+   Uses the theme tokens from index.css (--bg, --fg, --muted, --accent, …).
+   =========================================================================== */
+
+/* ---------- Skeleton ------------------------------------------------------ */
+.skeleton-pulse {
+  background: color-mix(in srgb, var(--border) 80%, var(--fg) 20%);
+  border-radius: 4px;
+  animation: skeletonPulse 1.4s ease-in-out infinite;
+}
+@keyframes skeletonPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.sk-line { height: 11px; margin-bottom: 7px; }
+.sk-line.lg { height: 16px; }
+.sk-line.sm { height: 9px; }
+
+/* ---------- Small helpers ------------------------------------------------- */
+.spin { animation: smSpin 0.9s linear infinite; }
+@keyframes smSpin { to { transform: rotate(360deg); } }
+.visually-hidden {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px;
+}
+
+/* ---------- Highlights ---------------------------------------------------- */
+/* Rendered by React (search snippets) */
+mark.hl-term {
+  background: color-mix(in srgb, #ffd43b 70%, transparent);
+  color: inherit; padding: 0 1px; border-radius: 2px;
+}
+[data-theme-mode="dark"] mark.hl-term { background: color-mix(in srgb, #ffd43b 45%, transparent); }
+.hl-passage {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  padding: 0.35rem 0.6rem; border-radius: 0 4px 4px 0;
+}
+/* Painted on the book page via the CSS Custom Highlight API */
+::highlight(sm-keyword) { background-color: #ffd43b; color: #1a1a1a; }
+::highlight(sm-passage) { background-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+
+/* ---------- Search box ---------------------------------------------------- */
+.sbox { position: relative; width: 100%; text-align: left; }
+.sbox-field {
+  display: flex; align-items: center; gap: 0.55rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 0 0.5rem 0 0.8rem; min-height: 48px;
+  transition: border-color 0.15s ease, box-shadow 0.2s ease;
+}
+.sbox-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.sbox-icon { color: var(--muted); flex-shrink: 0; transition: color 0.15s; }
+.sbox-field:focus-within .sbox-icon { color: var(--accent); }
+.sbox-input {
+  flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg);
+  font-size: 1rem; padding: 0.7rem 0; font-family: var(--font-english), 'Hind Siliguri', sans-serif;
+}
+.sbox-input:focus { outline: none; }
+.sbox-input::placeholder { color: color-mix(in srgb, var(--muted) 85%, transparent); }
+.sbox-clear { color: var(--muted); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 6px; }
+.sbox-clear:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.sbox-submit {
+  background: var(--accent); color: #fff; border-radius: 6px; font-weight: 600; font-size: 0.88rem;
+  padding: 0.5rem 0.95rem; display: inline-flex; align-items: center; gap: 0.35rem; flex-shrink: 0;
+}
+.sbox-submit:hover { opacity: 0.9; }
+.sbox-submit:disabled { opacity: 0.5; cursor: default; }
+.sbox-progress {
+  position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px; overflow: hidden; border-radius: 2px;
+  opacity: 0; transition: opacity 0.2s;
+}
+.sbox-progress.on { opacity: 1; }
+.sbox-progress::after {
+  content: ''; position: absolute; top: 0; bottom: 0; width: 35%; left: -35%;
+  background: var(--accent); animation: sboxSlide 1.1s ease-in-out infinite;
+}
+@keyframes sboxSlide { to { left: 100%; } }
+.sbox-caret {
+  display: inline-block; width: 1px; height: 1.05em; background: var(--muted);
+  vertical-align: text-bottom; margin-left: 1px; animation: sboxBlink 1s steps(1) infinite;
+}
+@keyframes sboxBlink { 50% { opacity: 0; } }
+.sbox-ghost {
+  position: absolute; left: 2.65rem; right: 7rem; top: 50%; transform: translateY(-50%);
+  pointer-events: none; color: color-mix(in srgb, var(--muted) 85%, transparent);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 1rem;
+}
+.sbox--compact .sbox-field { min-height: 44px; }
+@media (max-width: 480px) {
+  .sbox-submit span { display: none; }
+  .sbox-ghost { right: 3.6rem; }
+}
+
+/* ---------- Load-more / list states ------------------------------------- */
+.list-status {
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem; flex-wrap: wrap;
+  padding: 1.1rem 0; color: var(--muted); font-size: 0.85rem; text-align: center;
+}
+.list-status .link-btn { font-size: 0.85rem; }
+.load-more-btn {
+  border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 1.1rem; font-size: 0.86rem;
+  color: var(--fg); background: var(--surface); display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.load-more-btn:hover { border-color: var(--accent); color: var(--accent); }
+.load-more-btn:disabled { opacity: 0.6; cursor: default; }
+.state-block {
+  border: 1px dashed var(--border); border-radius: 8px; padding: 1.6rem 1.2rem; text-align: center;
+  color: var(--muted); margin: 1rem 0;
+}
+.state-block h3 { margin: 0 0 0.35rem; font-size: 1rem; color: var(--fg); }
+.state-block p { margin: 0.2rem auto; max-width: 460px; font-size: 0.88rem; }
+.state-block .state-actions { margin-top: 0.8rem; display: flex; gap: 0.8rem; justify-content: center; flex-wrap: wrap; }
+.state-block.error { border-color: color-mix(in srgb, #c0392b 45%, var(--border)); }
+
+/* ---------- Book export bar / menu -------------------------------------- */
+.bx-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.bx-btn {
+  display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--fg);
+  border: 1px solid var(--border); border-radius: 6px; padding: 0.38rem 0.7rem; background: var(--surface);
+}
+.bx-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.bx-btn:disabled { opacity: 0.6; cursor: default; }
+.bx-notice { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.78rem; color: var(--accent); min-height: 1em; }
+.bx-dots {
+  width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface);
+  display: grid; place-items: center; color: var(--muted); flex-shrink: 0;
+}
+.bx-dots:hover { border-color: var(--accent); color: var(--accent); }
+.bx-menu {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14); overflow: hidden; animation: menuFadeIn 0.12s ease;
+}
+.bx-menu button {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.6rem 0.85rem;
+  font-size: 0.84rem; color: var(--fg); text-align: left; border-bottom: 1px solid var(--border);
+}
+.bx-menu button:last-child { border-bottom: none; }
+.bx-menu button:hover, .bx-menu button:focus-visible { background: color-mix(in srgb, var(--accent) 8%, var(--bg)); color: var(--accent); outline: none; }
+.bx-toast { font-size: 0.72rem; color: var(--accent); }
+@keyframes menuFadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Motion preference ------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-pulse, .spin, .sbox-progress::after, .sbox-caret { animation: none !important; }
+  .sbox-progress.on { opacity: 1; background: var(--accent); }
+}

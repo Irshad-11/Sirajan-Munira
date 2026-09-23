@@ -55,9 +55,15 @@ export interface Heading {
   page_number: string | null;
   sort_order: number;
   importance_level: number | null; // 1–5, admin-assigned
+  title_text?: string;             // derived by DB trigger (migration 20260924)
   created_at: string;
   updated_at: string;
 }
+
+// Explicit heading columns — avoids pulling the derived search_text column
+// (a full plain-text copy of the content) into the browser.
+export const HEADING_COLS =
+  'id, book_id, level, content, page_number, sort_order, importance_level, created_at, updated_at';
 
 export interface Category {
   id: string;
@@ -227,7 +233,7 @@ export async function replaceSourceLinks(bookId: string, links: { label: string;
 export async function listHeadings(bookId: string): Promise<Heading[]> {
   const { data, error } = await supabase
     .from('headings')
-    .select('*')
+    .select(HEADING_COLS)
     .eq('book_id', bookId)
     .order('sort_order', { ascending: true });
   if (error) throw error;
@@ -235,7 +241,7 @@ export async function listHeadings(bookId: string): Promise<Heading[]> {
 }
 
 export async function getHeading(id: string): Promise<Heading | null> {
-  const { data, error } = await supabase.from('headings').select('*').eq('id', id).maybeSingle();
+  const { data, error } = await supabase.from('headings').select(HEADING_COLS).eq('id', id).maybeSingle();
   if (error) throw error;
   return data as any;
 }
@@ -352,7 +358,7 @@ export interface CategoryHeadingDetail {
 export async function listCategoryHeadings(categoryId: string): Promise<CategoryHeadingDetail[]> {
   const { data, error } = await supabase
     .from('category_headings')
-    .select('heading:headings(*, book:books(id, slug, title, author, cover_image_url))')
+    .select(`heading:headings(${HEADING_COLS}, book:books(id, slug, title, author, cover_image_url))`)
     .eq('category_id', categoryId);
   if (error) throw error;
   return ((data as any) || [])
@@ -591,75 +597,6 @@ export async function getLiveStats() {
 }
 
 // ---------------------------------------------------------------------------
-// Site-wide search (FR-26)
-// ---------------------------------------------------------------------------
-
-export interface SearchResult {
-  type: 'book' | 'category' | 'heading';
-  id: string;
-  title: string;
-  subtitle?: string;
-  href: string;
-  image?: string | null;
-}
-
-export async function siteSearch(query: string): Promise<SearchResult[]> {
-  const term = query.trim();
-  if (!term) return [];
-  const like = `%${term}%`;
-
-  const [booksByMeta, categories, headingsByBook] = await Promise.all([
-    supabase.from('books').select('id, slug, title, author, cover_image_url').eq('visibility', true).or(`title.ilike.${like},author.ilike.${like}`),
-    supabase.from('categories').select('id, name, banner_image_url').eq('visibility', true).ilike('name', like),
-    supabase
-      .from('headings')
-      .select('id, book_id, content, books!inner(slug, title, cover_image_url, visibility)')
-      .eq('books.visibility', true),
-  ]);
-
-  const results: SearchResult[] = [];
-
-  (booksByMeta.data || []).forEach((b: any) => {
-    results.push({ type: 'book', id: b.id, title: b.title, subtitle: b.author || undefined, href: `/book/${b.slug}`, image: b.cover_image_url });
-  });
-
-  (categories.data || []).forEach((c: any) => {
-    results.push({ type: 'category', id: c.id, title: c.name, href: `/collections/${c.id}`, image: c.banner_image_url });
-  });
-
-  const lower = term.toLowerCase();
-  (headingsByBook.data || []).forEach((h: any) => {
-    const text = docToPlainTextSafe(h.content);
-    if (text.toLowerCase().includes(lower)) {
-      const idx = text.toLowerCase().indexOf(lower);
-      const snippet = text.slice(Math.max(0, idx - 40), idx + 80);
-      results.push({
-        type: 'heading',
-        id: h.id,
-        title: h.books.title,
-        subtitle: `…${snippet}…`,
-        href: `/book/${h.books.slug}#${h.id}`,
-        image: h.books.cover_image_url,
-      });
-    }
-  });
-
-  return results.slice(0, 50);
-}
-
-function docToPlainTextSafe(doc: any): string {
-  if (!doc) return '';
-  let out = '';
-  const walk = (node: any) => {
-    if (!node) return;
-    if (node.type === 'text' && node.text) out += node.text + ' ';
-    if (Array.isArray(node.content)) node.content.forEach(walk);
-  };
-  walk(doc);
-  return out;
-}
-
-// ---------------------------------------------------------------------------
 // Storage (image upload)
 // ---------------------------------------------------------------------------
 
@@ -769,7 +706,7 @@ export async function getHeadingsByIds(ids: string[]): Promise<Heading[]> {
   if (!ids.length) return [];
   const { data, error } = await supabase
     .from('headings')
-    .select('*')
+    .select(HEADING_COLS)
     .in('id', ids);
   if (error) throw error;
   return (data as any) || [];
@@ -783,4 +720,305 @@ export async function getBookById(id: string): Promise<Book | null> {
     .maybeSingle();
   if (error) throw error;
   return data as any;
+}
+// ===========================================================================
+// Pagination, batched stats, keyword + semantic search, indexing
+// (requires supabase/migrations/20260924_search_pagination.sql)
+// ===========================================================================
+
+export interface Page<T> {
+  rows: T[];
+  total: number;
+}
+
+// ---------------------------------------------------------------------------
+// Book page: lightweight index of every heading (no content) — the sidebar,
+// sort modes and "jump to" use this; bodies are fetched page by page.
+// ---------------------------------------------------------------------------
+
+export interface HeadingIndexRow {
+  id: string;
+  level: number;
+  page_number: string | null;
+  sort_order: number;
+  importance_level: number | null;
+  title: string;
+}
+
+function titleFromContent(doc: any): string {
+  let out = '';
+  const walk = (n: any) => {
+    if (!n) return;
+    if (n.type === 'text' && n.text) out += n.text;
+    if (Array.isArray(n.content)) n.content.forEach(walk);
+  };
+  walk(doc?.content?.[0]);
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+export async function listHeadingIndex(bookId: string): Promise<HeadingIndexRow[]> {
+  const { data, error } = await supabase
+    .from('headings')
+    .select('id, level, page_number, sort_order, importance_level, title_text')
+    .eq('book_id', bookId)
+    .order('sort_order', { ascending: true });
+  if (!error) {
+    return ((data as any[]) || []).map((r) => ({ ...r, title: r.title_text || '' }));
+  }
+  // Fallback when the migration hasn't been run yet (no title_text column).
+  const fb = await supabase
+    .from('headings')
+    .select('id, level, page_number, sort_order, importance_level, content')
+    .eq('book_id', bookId)
+    .order('sort_order', { ascending: true });
+  if (fb.error) throw fb.error;
+  return ((fb.data as any[]) || []).map((r) => ({
+    id: r.id, level: r.level, page_number: r.page_number, sort_order: r.sort_order,
+    importance_level: r.importance_level, title: titleFromContent(r.content),
+  }));
+}
+
+/** heading id → collection ids, for a page of headings (one request). */
+export async function listCategoryIdsForHeadings(headingIds: string[]): Promise<Record<string, string[]>> {
+  if (!headingIds.length) return {};
+  const { data, error } = await supabase
+    .from('category_headings')
+    .select('heading_id, category_id')
+    .in('heading_id', headingIds);
+  if (error) throw error;
+  const map: Record<string, string[]> = {};
+  ((data as any[]) || []).forEach((r) => { (map[r.heading_id] ||= []).push(r.category_id); });
+  return map;
+}
+
+/** Full-text match inside one book (server side). Returns matching heading ids. */
+export async function findHeadingIdsInBook(bookId: string, query: string): Promise<string[]> {
+  const term = query.trim().replace(/[%_\\]/g, (m) => `\\${m}`);
+  if (!term) return [];
+  const { data, error } = await supabase
+    .from('headings')
+    .select('id')
+    .eq('book_id', bookId)
+    .ilike('search_text', `%${term}%`)
+    .limit(500);
+  if (error) throw error;
+  return ((data as any[]) || []).map((r) => r.id);
+}
+
+export async function getChunkText(chunkId: string | number): Promise<string | null> {
+  const { data, error } = await supabase.from('heading_chunks').select('content').eq('id', chunkId).maybeSingle();
+  if (error) return null;
+  return (data as any)?.content ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Bookshelf / Collections pages
+// ---------------------------------------------------------------------------
+
+export async function listBooksPage(opts: {
+  includeHidden: boolean; featured?: boolean; offset: number; limit: number;
+}): Promise<Page<Book>> {
+  let q = supabase
+    .from('books')
+    .select('*, source_links(*)', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(opts.offset, opts.offset + opts.limit - 1);
+  if (!opts.includeHidden) q = q.eq('visibility', true);
+  if (opts.featured !== undefined) q = q.eq('featured', opts.featured);
+  const { data, error, count } = await q;
+  if (error) throw error;
+  return { rows: (data as any) || [], total: count || 0 };
+}
+
+export interface BookStats { headingCount: number; viewCount: number; }
+
+export async function getBookStatsMany(ids: string[]): Promise<Record<string, BookStats>> {
+  if (!ids.length) return {};
+  const { data, error } = await supabase.rpc('sm_book_stats', { ids });
+  if (!error) {
+    const out: Record<string, BookStats> = {};
+    ((data as any[]) || []).forEach((r) => {
+      out[r.book_id] = { headingCount: Number(r.heading_count) || 0, viewCount: Number(r.view_count) || 0 };
+    });
+    return out;
+  }
+  // Fallback (migration not run): one request pair per book.
+  const pairs = await Promise.all(ids.map(async (id) => [id, await getBookStats(id)] as const));
+  return Object.fromEntries(pairs);
+}
+
+export async function listCategoriesPage(opts: {
+  includeHidden: boolean; featured?: boolean; offset: number; limit: number;
+}): Promise<Page<Category>> {
+  let q = supabase
+    .from('categories')
+    .select('*', { count: 'exact' })
+    .order('name')
+    .range(opts.offset, opts.offset + opts.limit - 1);
+  if (!opts.includeHidden) q = q.eq('visibility', true);
+  if (opts.featured !== undefined) q = q.eq('featured', opts.featured);
+  const { data, error, count } = await q;
+  if (error) throw error;
+  return { rows: (data as any) || [], total: count || 0 };
+}
+
+export async function getCategoryStatsMany(ids: string[]): Promise<Record<string, CategoryStats>> {
+  if (!ids.length) return {};
+  const { data, error } = await supabase.rpc('sm_category_stats', { ids });
+  if (!error) {
+    const out: Record<string, CategoryStats> = {};
+    ((data as any[]) || []).forEach((r) => {
+      out[r.category_id] = {
+        entryCount: Number(r.entry_count) || 0,
+        bookCount: Number(r.book_count) || 0,
+        viewCount: Number(r.view_count) || 0,
+      };
+    });
+    return out;
+  }
+  const pairs = await Promise.all(ids.map(async (id) => [id, await getCategoryStats(id)] as const));
+  return Object.fromEntries(pairs);
+}
+
+export async function getCategory(id: string): Promise<Category | null> {
+  const { data, error } = await supabase.from('categories').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data as any;
+}
+
+/** One page of a collection's findings, ordered by book then position. */
+export async function listCategoryItemsPage(
+  categoryId: string, offset: number, limit: number
+): Promise<Page<CategoryHeadingDetail>> {
+  const { data, error, count } = await supabase
+    .from('headings')
+    .select(
+      `${HEADING_COLS}, book:books!inner(id, slug, title, author, cover_image_url), category_headings!inner(category_id)`,
+      { count: 'exact' }
+    )
+    .eq('category_headings.category_id', categoryId)
+    .order('book_id')
+    .order('sort_order')
+    .range(offset, offset + limit - 1);
+  if (error) throw error;
+  const rows = ((data as any[]) || []).map((r) => {
+    const { book, category_headings, ...heading } = r;
+    return { heading: heading as Heading, book };
+  });
+  return { rows, total: count || 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
+export type SearchKind = 'heading' | 'book' | 'collection';
+
+export interface SearchRow {
+  kind: SearchKind;
+  id: string;
+  heading_id: string | null;
+  chunk_id?: number | null;
+  book_id: string | null;
+  book_slug: string | null;
+  book_title: string | null;
+  book_author: string | null;
+  image_url: string | null;
+  page_number: string | null;
+  title: string;
+  snippet: string;
+  color: string | null;
+  rank?: number;
+  similarity?: number;
+}
+
+export async function keywordSearch(
+  query: string,
+  opts: { limit: number; offset: number; kinds?: SearchKind[] | null }
+): Promise<Page<SearchRow>> {
+  const { data, error } = await supabase.rpc('sm_keyword_search', {
+    q: query,
+    result_limit: opts.limit,
+    result_offset: opts.offset,
+    kinds: opts.kinds && opts.kinds.length ? opts.kinds : null,
+  });
+  if (error) throw error;
+  const rows = ((data as any[]) || []) as (SearchRow & { total_count: number })[];
+  return { rows, total: rows.length ? Number(rows[0].total_count) : 0 };
+}
+
+export interface SemanticResponse extends Page<SearchRow> {
+  cached: boolean;
+  model: string;
+  tookMs: number;
+}
+
+async function functionErrorMessage(error: any): Promise<string> {
+  try {
+    const body = await error?.context?.json?.();
+    if (body?.message) return body.message;
+    if (body?.error) return body.error;
+  } catch { /* ignore */ }
+  return error?.message || 'Request failed';
+}
+
+export async function semanticSearch(
+  query: string,
+  opts: { threshold: number; limit: number; offset: number; includeCollections: boolean }
+): Promise<SemanticResponse> {
+  const { data, error } = await supabase.functions.invoke('semantic-search', {
+    body: { query, ...opts },
+  });
+  if (error) throw new Error(await functionErrorMessage(error));
+  return {
+    rows: (data?.results || []) as SearchRow[],
+    total: Number(data?.total) || 0,
+    cached: !!data?.cached,
+    model: data?.model || '',
+    tookMs: Number(data?.tookMs) || 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Semantic index maintenance (admin)
+// ---------------------------------------------------------------------------
+
+export interface EmbeddingStatus {
+  model: string;
+  headingsTotal: number;
+  headingsPending: number;
+  collectionsTotal: number;
+  collectionsPending: number;
+  chunksTotal: number;
+  processedHeadings?: number;
+  processedCollections?: number;
+}
+
+export async function embedIndex(action: 'status' | 'run' | 'reset'): Promise<EmbeddingStatus> {
+  const { data, error } = await supabase.functions.invoke('embed-index', { body: { action } });
+  if (error) throw new Error(await functionErrorMessage(error));
+  return data as EmbeddingStatus;
+}
+
+let indexTimer: ReturnType<typeof setTimeout> | null = null;
+let indexRunning = false;
+
+/** Fire-and-forget: after an admin edit, embed whatever changed.
+ *  Debounced so a burst of edits results in one background run. */
+export function requestIndexing(delayMs = 2500) {
+  if (indexTimer) clearTimeout(indexTimer);
+  indexTimer = setTimeout(async () => {
+    if (indexRunning) return;
+    indexRunning = true;
+    try {
+      for (let i = 0; i < 20; i++) {
+        const s = await embedIndex('run');
+        if (s.headingsPending + s.collectionsPending === 0) break;
+      }
+    } catch (e) {
+      console.warn('[semantic index] background indexing skipped:', e);
+    } finally {
+      indexRunning = false;
+    }
+  }, delayMs);
 }
