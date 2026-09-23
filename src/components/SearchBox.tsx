@@ -8,7 +8,6 @@ export const SEARCH_EXAMPLES = [
   'আলীর ইমামত ও বেলায়াত',
   'আহলে বাইত রিসালাতের এবং জ্ঞানের উৎসস্থল',
   'আমার পক্ষ থেকে আমার দায়িত্ব পৌঁছে দেবে না, আলী ছাড়া।',
-  'letters left behind',
 ];
 
 function usePrefersReducedMotion() {
