@@ -248,7 +248,9 @@ export default function SearchPage() {
   const { isAdmin } = useAdmin();
   const [params, setParams] = useSearchParams();
   const q = (params.get('q') || '').trim();
-  const tab: Tab = params.get('tab') === 'keyword' ? 'keyword' : 'semantic';
+  // Keyword is the default (instant, free). Semantic is slower and costs an
+  // embedding call, so it only runs when the reader asks for it.
+  const tab: Tab = params.get('tab') === 'semantic' ? 'semantic' : 'keyword';
   const terms = useMemo(() => splitTerms(q), [q]);
   useTrackView('site', 'search');
 
@@ -274,6 +276,8 @@ export default function SearchPage() {
   const [kw, setKw] = useState<ListState & { cached?: boolean }>(() => fromCache(q ? kwKey(q, kind) : null));
   const [sem, setSem] = useState<ListState & { cached?: boolean; tookMs?: number }>(() => fromCache(q.length >= 2 ? semKey(q) : null));
   const [semShown, setSemShown] = useState(() => savedPos.current?.semShown || SEMANTIC_PAGE);
+  // The query that semantic search has been explicitly started for (null = not started).
+  const [semRunFor, setSemRunFor] = useState<string | null>(() => (tab === 'semantic' && q.length >= 2 ? q : null));
   const kwReq = useRef(0);
   const semReq = useRef(0);
   const kwRef = useRef(kw); kwRef.current = kw;
@@ -330,8 +334,22 @@ export default function SearchPage() {
     }
   }, [q]);
 
-  useEffect(() => { runKeyword(); }, [runKeyword]);
-  useEffect(() => { runSemantic(); }, [runSemantic]);
+  // Keyword runs only while the Keyword tab is showing.
+  useEffect(() => {
+    if (tab === 'keyword') { runKeyword(); return; }
+    kwReq.current++;
+    const hit = q ? cacheGet<CachedList>(kwKey(q, kind)) : null;
+    setKw(hit ? { rows: hit.rows, total: hit.total, status: 'done', error: null, cached: true } : EMPTY);
+  }, [runKeyword, tab, q, kind]);
+  // Semantic runs ONLY after the reader started it for this exact query
+  // (search submitted on the Semantic tab, or the "Run semantic search" button).
+  // Otherwise we just show saved results if this query was searched before.
+  useEffect(() => {
+    if (semRunFor !== null && semRunFor === q) { runSemantic(); return; }
+    semReq.current++;                                   // drop any in-flight request for an old query
+    const hit = q.length >= 2 ? cacheGet<CachedList>(semKey(q)) : null;
+    setSem(hit ? { rows: hit.rows, total: hit.total, status: 'done', error: null, cached: true, tookMs: hit.tookMs } : EMPTY);
+  }, [q, semRunFor, runSemantic]);
 
   // A new query starts with the first page of results.
   const firstQ = useRef(true);
@@ -378,6 +396,8 @@ export default function SearchPage() {
     const p = new URLSearchParams(params);
     p.set('q', next);
     setParams(p);
+    // Submitting from the Semantic tab is an explicit request for semantic search.
+    if (tab === 'semantic' && next.trim().length >= 2) setSemRunFor(next.trim());
   };
   const setTab = (t: Tab) => {
     const p = new URLSearchParams(params);
@@ -396,7 +416,8 @@ export default function SearchPage() {
   const recPos = ((RECOMMENDED_THRESHOLD - THRESHOLD_MIN) / (THRESHOLD_MAX - THRESHOLD_MIN)) * 100;
 
   const tabCount = (st: ListState, label: string | number) =>
-    st.status === 'loading' ? <Loader2 size={12} className="spin" aria-label="loading" />
+    st.status === 'idle' ? null
+      : st.status === 'loading' ? <Loader2 size={12} className="spin" aria-label="loading" />
       : st.status === 'error' ? <span className="tab-count tab-count--err">!</span>
       : q ? <span className="tab-count">{label}</span> : null;
 
@@ -492,6 +513,16 @@ export default function SearchPage() {
               <div className="state-block"><p>Type at least two characters for semantic search.</p></div>
             )}
 
+            {q.length >= 2 && sem.status === 'idle' && semRunFor !== q && (
+              <div className="state-block">
+                <h3>Semantic search hasn't been run</h3>
+                <p>It finds passages by meaning, but it's slower, so it only runs when you ask.</p>
+                <div className="state-actions">
+                  <button className="primary" onClick={() => setSemRunFor(q)}><Sparkles size={13} /> Run semantic search for “{q}”</button>
+                </div>
+              </div>
+            )}
+
             {(sem.status === 'done' || sem.status === 'more') && semVisible.length === 0 && (
               <div className="state-block">
                 <h3>No passage reached {Math.round(threshold * 100)}% confidence</h3>
@@ -562,7 +593,7 @@ export default function SearchPage() {
                 <p>Check the spelling, use fewer words, or search by meaning instead.</p>
                 <div className="state-actions">
                   {kind !== 'all' && <button className="link-btn" onClick={() => setKind('all')}>Show all types</button>}
-                  <button className="primary" onClick={() => setTab('semantic')}>Try semantic search</button>
+                  <button className="primary" onClick={() => { if (q.length >= 2) setSemRunFor(q); setTab('semantic'); }}>Try semantic search</button>
                 </div>
               </div>
             )}

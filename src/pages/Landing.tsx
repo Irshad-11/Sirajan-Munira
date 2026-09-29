@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   BookOpen, FolderOpen, Bookmark, Search, ShieldCheck, Printer,
-  Inbox as InboxIcon, ArrowRight, Star, Plus, Pencil, Trash2, X,
+  Inbox as InboxIcon, ArrowRight, Star, Plus, Pencil, Trash2, X, ArrowUpRight,
 } from 'lucide-react';
 import { useAdmin, useTrackView } from '../lib/context';
 import { Book, Category, getLiveStats, listBooks, listCategories, getSiteSetting, setSiteSetting } from '../lib/supabase';
@@ -290,25 +290,37 @@ function AnimatedHeroSVG() {
 // ---------------------------------------------------------------------------
 // Shelf Quotes — admin-managed
 // ---------------------------------------------------------------------------
-interface ShelfQuote { id: string; text: string; source: string; }
+interface ShelfQuote { id: string; text: string; source: string; url?: string; }
+
+/** "example.com/x" -> "https://example.com/x"; "/book/abc" stays internal; "" -> undefined */
+function normalizeUrl(raw?: string): string | undefined {
+  const v = (raw || '').trim();
+  if (!v) return undefined;
+  if (v.startsWith('/')) return v;
+  if (/^(https?:|mailto:|tel:)/i.test(v)) return v;
+  return `https://${v}`;
+}
 
 function QuoteManager({ quotes, onChange }: { quotes: ShelfQuote[]; onChange: (q: ShelfQuote[]) => void }) {
   const [text, setText] = useState('');
   const [source, setSource] = useState('');
+  const [url, setUrl] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
+
+  const reset = () => { setEditId(null); setText(''); setSource(''); setUrl(''); };
 
   const save = async () => {
     if (!text.trim() || !source.trim()) return;
+    const link = normalizeUrl(url);
     let next: ShelfQuote[];
     if (editId) {
-      next = quotes.map(q => q.id === editId ? { ...q, text: text.trim(), source: source.trim() } : q);
-      setEditId(null);
+      next = quotes.map(q => q.id === editId ? { ...q, text: text.trim(), source: source.trim(), url: link } : q);
     } else {
-      next = [...quotes, { id: Date.now().toString(), text: text.trim(), source: source.trim() }];
+      next = [...quotes, { id: Date.now().toString(), text: text.trim(), source: source.trim(), url: link }];
     }
     await setSiteSetting('shelf_quotes', next);
     onChange(next);
-    setText(''); setSource('');
+    reset();
   };
 
   const remove = async (id: string) => {
@@ -317,64 +329,70 @@ function QuoteManager({ quotes, onChange }: { quotes: ShelfQuote[]; onChange: (q
     onChange(next);
   };
 
-  const startEdit = (q: ShelfQuote) => { setEditId(q.id); setText(q.text); setSource(q.source); };
+  const startEdit = (q: ShelfQuote) => { setEditId(q.id); setText(q.text); setSource(q.source); setUrl(q.url || ''); };
 
   return (
     <div className="quote-manager">
-      <h4 className="quote-manager__title">Manage "From the Shelf" Quotes</h4>
+      <h4 className="quote-manager__title">Manage "From the Shelf" cards</h4>
       <div className="quote-manager__form">
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Quote text…" rows={3} className="quote-manager__textarea" />
+        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Card text…" rows={3} className="quote-manager__textarea" />
         <input value={source} onChange={e => setSource(e.target.value)} placeholder="Source (book name, author…)" className="quote-manager__input" />
+        <input value={url} onChange={e => setUrl(e.target.value)} placeholder="Link (optional) — https://… or /book/your-slug" className="quote-manager__input" inputMode="url" />
         <div className="quote-manager__btns">
-          <button className="primary" onClick={save}>{editId ? 'Save edit' : <><Plus size={13}/> Add quote</>}</button>
-          {editId && <button className="secondary" onClick={() => { setEditId(null); setText(''); setSource(''); }}>Cancel</button>}
+          <button className="primary" onClick={save}>{editId ? 'Save edit' : <><Plus size={13}/> Add card</>}</button>
+          {editId && <button className="secondary" onClick={reset}>Cancel</button>}
         </div>
       </div>
       <div className="quote-manager__list">
         {quotes.map(q => (
           <div key={q.id} className="quote-manager__item">
             <div className="quote-manager__item-text">"{q.text.slice(0, 80)}{q.text.length > 80 ? '…' : ''}"</div>
-            <div className="quote-manager__item-source muted">— {q.source}</div>
+            <div className="quote-manager__item-source muted">— {q.source}{q.url ? ` · 🔗 ${q.url}` : ''}</div>
             <div className="quote-manager__item-actions">
               <button onClick={() => startEdit(q)}><Pencil size={12}/> Edit</button>
               <button onClick={() => remove(q.id)} className="danger"><Trash2 size={12}/> Remove</button>
             </div>
           </div>
         ))}
-        {quotes.length === 0 && <p className="muted" style={{fontSize:'0.82rem'}}>No quotes added yet.</p>}
+        {quotes.length === 0 && <p className="muted" style={{fontSize:'0.82rem'}}>No cards added yet.</p>}
       </div>
     </div>
   );
 }
 
-function RotatingQuotes({ quotes }: { quotes: ShelfQuote[] }) {
-  const [idx, setIdx] = useState(0);
-  const [visible, setVisible] = useState(true);
+// Same id -> same look, every time (so cards don't jump around on reload).
+function hashId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h;
+}
+// Some cards lean left, some right, a few stay straight.
+const TILTS = [-2.6, 1.8, 0, -1.2, 2.4, 0, 1.2, -2];
 
-  useEffect(() => {
-    if (quotes.length <= 1) return;
-    const t = setInterval(() => {
-      setVisible(false);
-      setTimeout(() => { setIdx(i => (i + 1) % quotes.length); setVisible(true); }, 400);
-    }, 5000);
-    return () => clearInterval(t);
-  }, [quotes.length]);
+function ShelfCard({ q }: { q: ShelfQuote }) {
+  const h = hashId(q.id);
+  const tilt = TILTS[h % TILTS.length];
+  const href = normalizeUrl(q.url);
+  const style = { ['--tilt' as any]: `${tilt}deg`, ['--tone' as any]: `${(h >> 3) % 3}` } as React.CSSProperties;
+  const inner = (
+    <>
+      <span className="shelf-pin" aria-hidden="true" />
+      <p className="shelf-card__text">“{q.text}”</p>
+      <p className="shelf-card__source">— {q.source}</p>
+      {href && <span className="shelf-card__go" aria-hidden="true"><ArrowUpRight size={14} /></span>}
+    </>
+  );
+  const cls = `shelf-card shelf-tone-${(h >> 3) % 3} ${href ? 'shelf-card--link' : ''}`;
+  if (!href) return <div className={cls} style={style}>{inner}</div>;
+  if (href.startsWith('/')) return <Link to={href} className={cls} style={style}>{inner}</Link>;
+  return <a href={href} target="_blank" rel="noopener noreferrer" className={cls} style={style}>{inner}</a>;
+}
 
-  if (!quotes.length) return null;
-  const q = quotes[idx];
+/** One wall of cards (no slider). */
+function ShelfWall({ quotes }: { quotes: ShelfQuote[] }) {
   return (
-    <div className="landing-quote-card">
-      <div className={`landing-quote-inner ${visible ? 'lq-visible' : 'lq-hidden'}`}>
-        <p className="landing-quote-text">"{q.text}"</p>
-        <p className="landing-quote-source muted">— {q.source}</p>
-      </div>
-      {quotes.length > 1 && (
-        <div className="lq-dots">
-          {quotes.map((_, i) => (
-            <button key={i} className={`lq-dot ${i === idx ? 'lq-dot--active' : ''}`} onClick={() => { setIdx(i); setVisible(true); }} />
-          ))}
-        </div>
-      )}
+    <div className="shelf-wall">
+      {quotes.map(q => <ShelfCard key={q.id} q={q} />)}
     </div>
   );
 }
@@ -495,7 +513,7 @@ export default function Landing() {
           <div className="lnd-stats-sep" />
           <div className="lnd-stat"><strong>{stats.categories}</strong><span>collections</span></div>
           <div className="lnd-stats-sep" />
-          <div className="lnd-stat"><strong>{stats.visitors}</strong><span>visitors</span></div>
+          <div className="lnd-stat"><strong>{Math.max(stats.visitors, 1).toLocaleString()}</strong><span>visitors</span></div>
         </div>
       )}
 
@@ -541,9 +559,9 @@ export default function Landing() {
             <QuoteManager quotes={quotes} onChange={setQuotes} />
           )}
           {quotes.length > 0 ? (
-            <RotatingQuotes quotes={quotes} />
+            <ShelfWall quotes={quotes} />
           ) : (
-            <p className="muted" style={{fontStyle:'italic'}}>No quotes added yet.{isAdmin ? ' Click "Manage" to add some.' : ''}</p>
+            <p className="muted" style={{fontStyle:'italic'}}>No cards added yet.{isAdmin ? ' Click "Manage" to add some.' : ''}</p>
           )}
         </RevealSection>
 
@@ -647,16 +665,34 @@ const LANDING_CSS = `
 .lnd-col-chip { display:inline-flex; align-items:center; gap:.35rem; padding:.35rem .75rem; border:1px solid var(--border); border-radius:20px; font-size:.8rem; color:var(--fg); text-decoration:none; background:var(--surface); transition:border-color .15s,color .15s; }
 .lnd-col-chip:hover { border-color:var(--accent); color:var(--accent); }
 
-/* Quote card */
-.landing-quote-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1.3rem 1.5rem; }
-.landing-quote-inner { transition:opacity .4s ease; }
-.lq-visible { opacity:1; }
-.lq-hidden { opacity:0; }
-.landing-quote-text { font-family:var(--font-serif),Georgia,serif; font-style:italic; font-size:1rem; line-height:1.75; color:var(--muted); margin:0 0 .7rem; }
-.landing-quote-source { font-size:.8rem; margin:0; }
-.lq-dots { display:flex; justify-content:center; gap:.4rem; margin-top:.8rem; }
-.lq-dot { width:6px; height:6px; border-radius:50%; background:var(--border); padding:0; transition:background .2s,transform .2s; }
-.lq-dot--active { background:var(--accent); transform:scale(1.4); }
+/* From the shelf — wall of tilted cards */
+.shelf-wall { column-count:3; column-gap:1.1rem; padding:.6rem .3rem .2rem; }
+@media(max-width:900px){ .shelf-wall{ column-count:2; } }
+@media(max-width:520px){ .shelf-wall{ column-gap:.8rem; } }
+.shelf-card {
+  position:relative; display:block; break-inside:avoid; margin:0 0 1.2rem;
+  padding:1.6rem 1.1rem 1rem; border-radius:6px; text-decoration:none; color:var(--fg);
+  background:var(--surface); border:1px solid var(--border);
+  box-shadow:0 2px 3px rgba(0,0,0,.06), 0 10px 22px -8px rgba(0,0,0,.22);
+  transform:rotate(var(--tilt,0deg)); transform-origin:50% 12%;
+  transition:transform .28s cubic-bezier(.2,.8,.2,1), box-shadow .28s ease, border-color .2s;
+  -webkit-tap-highlight-color:transparent;
+}
+.shelf-tone-1 { background:color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.shelf-tone-2 { background:color-mix(in srgb, #e0b040 12%, var(--surface)); }
+.shelf-pin { position:absolute; top:7px; left:50%; width:13px; height:13px; margin-left:-6px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--accent) 55%, #fff), var(--accent));
+  box-shadow:0 2px 3px rgba(0,0,0,.3); }
+.shelf-card__text { font-family:var(--font-serif),Georgia,serif; font-style:italic; font-size:.98rem; line-height:1.7; margin:0 0 .7rem; color:var(--fg); }
+.shelf-card__source { font-size:.76rem; color:var(--muted); margin:0; }
+.shelf-card__go { position:absolute; right:.6rem; bottom:.55rem; color:var(--accent); opacity:.75; display:inline-flex; }
+.shelf-card--link { cursor:pointer; padding-bottom:1.6rem; }
+.shelf-card--link:hover, .shelf-card--link:focus-visible {
+  transform:rotate(0deg) translateY(-5px) scale(1.03); border-color:var(--accent); outline:none;
+  box-shadow:0 4px 6px rgba(0,0,0,.08), 0 18px 32px -10px rgba(0,0,0,.32); z-index:2;
+}
+.shelf-card--link:hover .shelf-card__go { opacity:1; }
+@media (prefers-reduced-motion: reduce){ .shelf-card{ transition:none; } }
 
 /* Quote manager */
 .quote-manager { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:1rem; margin-bottom:1rem; }

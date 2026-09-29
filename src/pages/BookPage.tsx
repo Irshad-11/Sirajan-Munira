@@ -556,7 +556,37 @@ function BookSidebar({
 // Floating go-to-top / bottom
 // ---------------------------------------------------------------------------
 
-function FloatingScrollBtns() {
+/** true only while the reader is scrolling FAST (a flick / drag through the
+ *  book). Slow, normal reading scroll keeps it false. Stays true for a moment
+ *  after the last fast move so the buttons can actually be tapped. */
+function useFastScroll(thresholdPxPerMs = 1.6, holdMs = 2200) {
+  const [fast, setFast] = useState(false);
+  useEffect(() => {
+    let lastY = window.scrollY;
+    let lastT = performance.now();
+    let smooth = 0;
+    let timer: number | undefined;
+    const onScroll = () => {
+      const now = performance.now();
+      const dt = now - lastT;
+      const y = window.scrollY;
+      if (dt < 4) return;
+      const v = Math.abs(y - lastY) / dt;          // px per ms
+      smooth = smooth * 0.5 + v * 0.5;             // damp single-event spikes
+      lastY = y; lastT = now;
+      if (smooth > thresholdPxPerMs) {
+        setFast(true);
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => setFast(false), holdMs);
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { window.removeEventListener('scroll', onScroll); window.clearTimeout(timer); };
+  }, [thresholdPxPerMs, holdMs]);
+  return fast;
+}
+
+function FloatingScrollBtns({ motion }: { motion: boolean }) {
   const [showTop, setShowTop] = useState(false);
   const [showBottom, setShowBottom] = useState(false);
   useEffect(() => {
@@ -571,7 +601,7 @@ function FloatingScrollBtns() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
   return (
-    <div className="floating-scroll-btns no-print">
+    <div className={`floating-scroll-btns no-print bp-autohide ${motion ? 'bp-autohide--on' : ''}`}>
       {showTop && <button className="floating-scroll-btn" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Go to top"><ArrowUp size={16} /></button>}
       {showBottom && <button className="floating-scroll-btn" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} aria-label="Go to bottom"><ArrowDown size={16} /></button>}
     </div>
@@ -1006,6 +1036,8 @@ function BookPageInner() {
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
   }, [isMobile, sidebarMobileOpen]);
 
+  const fastScroll = useFastScroll();
+
   const nextSortOrder = useMemo(() => (index.length ? Math.max(...index.map((h) => h.sort_order)) + 1 : 0), [index]);
 
   if (bookState === 'loading') return <BookSkeleton />;
@@ -1035,9 +1067,9 @@ function BookPageInner() {
   return (
     <div className="page book-page" data-hscale={hScale}>
       <style>{BOOK_PAGE_CSS}</style>
-      <FloatingScrollBtns />
+      <FloatingScrollBtns motion={fastScroll} />
       {sidebarHidden && indexState === 'ready' && index.length > 0 && (
-        <button className="bp-fab-findings no-print" onClick={openSidebar} aria-label="Show findings list" aria-expanded={false}>
+        <button className={`bp-fab-findings no-print bp-autohide ${fastScroll ? 'bp-autohide--on' : ''}`} onClick={openSidebar} aria-label="Show findings list" aria-expanded={false}>
           <ListTree size={16} />
           <span className="bp-fab-label">Findings</span>
           <span className="bp-fab-count">{index.length}</span>
@@ -1353,6 +1385,13 @@ const BOOK_PAGE_CSS = `
 .sidebar-filter-active { color: var(--accent) !important; }
 .book-sidebar-actions { display: flex; gap: 0.6rem; font-size: 0.74rem; margin-bottom: 0.5rem; flex-wrap: wrap; align-items: center; }
 .book-sidebar-actions .link-btn { display: inline-flex; align-items: center; gap: 0.2rem; }
+
+
+/* ── Findings + top/bottom buttons: hidden while reading, shown on fast scroll ── */
+.bp-autohide { opacity: 0; transform: translateY(12px) scale(.96); pointer-events: none;
+  transition: opacity .25s ease, transform .25s ease; animation: none !important; }
+.bp-autohide--on, .bp-autohide:focus-within, .bp-autohide:focus-visible { opacity: 1; transform: none; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) { .bp-autohide { transition: opacity .1s; transform: none; } }
 
 /* ── Floating scroll buttons ─────── */
 .floating-scroll-btns { position: fixed; bottom: 1.5rem; right: 1.2rem; z-index: 200; display: flex; flex-direction: column; gap: 0.4rem; }

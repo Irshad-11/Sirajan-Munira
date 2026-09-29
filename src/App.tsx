@@ -11,10 +11,12 @@ import SearchPage from './pages/Search';
 import Analytics from './pages/Analytics';
 import { AboutPage, ContactPage } from './pages/StaticPages';
 import BookmarksPage from './pages/Bookmarks';
+import { Splash } from './components/Splash';
 
 export default function App() {
   return (
     <AdminProvider>
+      <Splash />
       <PrefsProvider>
         <BrowserRouter>
           <Layout>

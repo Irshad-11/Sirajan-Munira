@@ -516,17 +516,19 @@ export async function getUnreadMessageCount(): Promise<number> {
 // ---------------------------------------------------------------------------
 
 export function getAnonVisitorId(): string {
+  // One random id per browser/device, kept for good — so "visitors" counts
+  // real people (devices), not one entry per person per day.
   const key = 'sm_anon_visitor_id';
-  const dayKey = 'sm_anon_visitor_day';
-  const today = new Date().toISOString().slice(0, 10);
-  const storedDay = localStorage.getItem(dayKey);
-  let id = localStorage.getItem(key);
-  if (!id || storedDay !== today) {
-    id = `${today}-${Math.random().toString(36).slice(2, 10)}`;
-    localStorage.setItem(key, id);
-    localStorage.setItem(dayKey, today);
+  try {
+    let id = localStorage.getItem(key);
+    if (!id || id.length < 8) {
+      id = `v-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+      localStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return `v-tmp-${Math.random().toString(36).slice(2, 10)}`;
   }
-  return id;
 }
 
 export async function trackEvent(
@@ -591,8 +593,14 @@ export async function getLiveStats() {
     supabase.from('books').select('*', { count: 'exact', head: true }).eq('visibility', true),
     supabase.from('categories').select('*', { count: 'exact', head: true }).eq('visibility', true),
   ]);
-  const { data: visitorRows } = await supabase.from('analytics_events').select('anon_visitor_id');
-  const totalVisitors = new Set((visitorRows || []).map((r: any) => r.anon_visitor_id)).size;
+  // analytics_events can only be READ by the admin (RLS), so a guest's direct
+  // select always returned 0 rows -> "0 visitors". A SECURITY DEFINER function
+  // (see supabase/migrations/20260929_visitors.sql) returns just the count.
+  let totalVisitors = 0;
+  try {
+    const { data, error } = await supabase.rpc('get_visitor_count');
+    if (!error && data != null) totalVisitors = Number(data) || 0;
+  } catch { /* fall through */ }
   return { books: bookCount || 0, categories: categoryCount || 0, visitors: totalVisitors };
 }
 
