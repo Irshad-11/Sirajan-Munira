@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, LogIn, LogOut, Search as SearchIcon, X, Menu, Bookmark } from 'lucide-react';
+import { Settings as SettingsIcon, LogIn, LogOut, Search as SearchIcon, X, Menu, Bookmark, Pin, ChevronUp, ChevronDown } from 'lucide-react';
 import { useAdmin, usePrefs, THEMES } from '../lib/context';
 import { getUnreadMessageCount, getSiteSetting, setSiteSetting } from '../lib/supabase';
 
@@ -83,17 +83,60 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
+// Desktop-only nav controls (pin / minimize)
+// Only real laptops/desktops get them: a wide screen AND a mouse/trackpad.
+// Phones, tablets (incl. big iPads in landscape) keep the normal behaviour.
+// ---------------------------------------------------------------------------
+const DESKTOP_MQ = '(min-width: 1024px) and (hover: hover) and (pointer: fine)';
+const NAV_PIN_KEY = 'sm_nav_pinned';
+const NAV_MIN_KEY = 'sm_nav_minimized';
+
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(() => {
+    try { return window.matchMedia(DESKTOP_MQ).matches; } catch { return false; }
+  });
+  useEffect(() => {
+    let mq: MediaQueryList;
+    try { mq = window.matchMedia(DESKTOP_MQ); } catch { return; }
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener?.('change', update);
+    return () => mq.removeEventListener?.('change', update);
+  }, []);
+  return isDesktop;
+}
+
+function readFlag(key: string) {
+  try { return localStorage.getItem(key) === '1'; } catch { return false; }
+}
+function writeFlag(key: string, on: boolean) {
+  try { on ? localStorage.setItem(key, '1') : localStorage.removeItem(key); } catch { /* storage blocked — state just won't persist */ }
+}
+
+// ---------------------------------------------------------------------------
 // NavBar
 // ---------------------------------------------------------------------------
 export function NavBar() {
   const { isAdmin, setLoginOpen, logout } = useAdmin();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [hidden, setHidden] = useState(false);
+  const [hidden, setHidden] = useState(false);          // auto-hide from scrolling
+  const [pinned, setPinned] = useState(() => readFlag(NAV_PIN_KEY));
+  const [minimized, setMinimized] = useState(() => readFlag(NAV_MIN_KEY));
   const [q, setQ] = useState('');
   const [unread, setUnread] = useState(0);
   const navRef = useRef<HTMLElement | null>(null);
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
+
+  // Pin / minimize only take effect on desktop; elsewhere they're ignored
+  // (the saved choice is kept for the next time you're on a desktop).
+  const pinActive = isDesktop && pinned;
+  const minActive = isDesktop && minimized;
+  const navHidden = minActive || (!pinActive && hidden && !menuOpen);
+
+  useEffect(() => { writeFlag(NAV_PIN_KEY, pinned); }, [pinned]);
+  useEffect(() => { writeFlag(NAV_MIN_KEY, minimized); }, [minimized]);
 
   useEffect(() => {
     const load = () => getUnreadMessageCount().then(setUnread).catch(() => {});
@@ -102,14 +145,23 @@ export function NavBar() {
     return () => clearInterval(t);
   }, []);
 
+  // --nav-height     : full height of the nav (used for page top padding etc.)
+  // --nav-visible-h  : how much of the nav currently covers the top of the
+  //                    screen (0 while hidden/minimized). Sticky panels and
+  //                    the editor toolbar use this so they always sit just
+  //                    below the nav — never underneath it.
   useEffect(() => {
     const setH = () => {
-      if (navRef.current) document.documentElement.style.setProperty('--nav-height', `${navRef.current.offsetHeight}px`);
+      if (!navRef.current) return;
+      const h = navRef.current.offsetHeight;
+      const root = document.documentElement.style;
+      root.setProperty('--nav-height', `${h}px`);
+      root.setProperty('--nav-visible-h', navHidden ? '0px' : `${h}px`);
     };
     setH();
     window.addEventListener('resize', setH);
     return () => window.removeEventListener('resize', setH);
-  }, [menuOpen]);
+  }, [menuOpen, navHidden, isDesktop, isAdmin]);
 
   useEffect(() => {
     let lastY = window.scrollY;
@@ -123,6 +175,19 @@ export function NavBar() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  const togglePin = () => {
+    setHidden(false);               // never let a stale auto-hide kick in on unpin
+    setPinned((v) => !v);
+  };
+  const minimize = () => {
+    setSettingsOpen(false);
+    setMinimized(true);
+  };
+  const restore = () => {
+    setHidden(false);               // back to normal behaviour, starting visible
+    setMinimized(false);
+  };
+
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (q.trim()) navigate(`/search?q=${encodeURIComponent(q.trim())}`);
@@ -130,7 +195,11 @@ export function NavBar() {
   };
 
   return (
-    <header ref={navRef as any} className={`site-nav ${isAdmin ? 'admin-mode' : ''} ${hidden && !menuOpen ? 'nav-hidden' : ''}`}>
+    <>
+    <header
+      ref={navRef as any}
+      className={`site-nav ${isAdmin ? 'admin-mode' : ''} ${navHidden ? 'nav-hidden' : ''} ${pinActive ? 'nav-pinned' : ''} ${minActive ? 'nav-minimized' : ''}`}
+    >
       <Link to="/" className="brand" onClick={() => setMenuOpen(false)}>
         <span className="brand-main">Sirājan Munīrā</span>
         <span className="brand-sub">an imprint of Safeenah</span>
@@ -158,6 +227,31 @@ export function NavBar() {
       </form>
 
       <div className="nav-actions">
+        {/* Desktop only: pin (stop auto-hide) + minimize */}
+        {isDesktop && (
+          <span className="nav-desk-controls">
+            <button
+              type="button"
+              onClick={togglePin}
+              className={`icon-btn nav-pin-btn ${pinned ? 'active' : ''}`}
+              title={pinned ? 'Unpin navigation bar (auto-hide while scrolling)' : 'Pin navigation bar (stay visible while scrolling)'}
+              aria-label={pinned ? 'Unpin navigation bar' : 'Pin navigation bar'}
+              aria-pressed={pinned}
+            >
+              <Pin size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={minimize}
+              className="icon-btn nav-min-btn"
+              title="Minimize navigation bar"
+              aria-label="Minimize navigation bar"
+            >
+              <ChevronUp size={16} />
+            </button>
+          </span>
+        )}
+
         {/* Bookmarks shortcut */}
         <Link to="/bookmarks" className="icon-btn" title="My bookmarks"><Bookmark size={16} /></Link>
         <button onClick={() => setSettingsOpen(true)} title="Settings" className="icon-btn"><SettingsIcon /></button>
@@ -179,6 +273,21 @@ export function NavBar() {
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
       <AdminLoginBox />
     </header>
+
+    {/* Rendered OUTSIDE the header: the header is moved with a transform,
+        and a fixed child of a transformed parent would move with it. */}
+    {minActive && (
+      <button
+        type="button"
+        className="nav-restore-tab"
+        onClick={restore}
+        title="Show navigation bar"
+        aria-label="Show navigation bar"
+      >
+        <ChevronDown size={16} />
+      </button>
+    )}
+    </>
   );
 }
 

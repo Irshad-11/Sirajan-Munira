@@ -177,14 +177,24 @@ button.tiny { font-size: 0.7rem; }
 .split-list { min-width: 0; }
 .split-detail {
   border-left: 1px solid var(--border); padding-left: 1.2rem;
-  position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto;
+  /* Sits just below the fixed nav (or at the top when the nav is hidden /
+     minimized) so the panel — and the editor toolbar inside it — is never
+     covered by the nav. --nav-visible-h is kept up to date by NavBar. */
+  position: sticky;
+  top: calc(var(--nav-visible-h, var(--nav-height, 58px)) + 12px);
+  max-height: calc(100vh - var(--nav-visible-h, var(--nav-height, 58px)) - 24px);
+  overflow-y: auto;
+  transition: top 0.22s ease, max-height 0.22s ease;
 }
 @media (max-width: 860px) {
   .split-view.has-detail, .split-view.has-detail.wide-detail { display: block; }
   .split-detail {
     position: fixed; inset: 0; z-index: 250; background: var(--bg); border-left: none;
-    padding: 1rem; max-height: 100%; top: 0; overflow-y: auto;
+    padding: 1rem; max-height: 100%; top: 0; overflow-y: auto; transition: none;
   }
+  /* Full-screen editor overlay: stick the toolbar flush to the very top
+     (cancels the overlay's 1rem padding so no text peeks above the bar). */
+  .split-detail .editor-toolbar { top: -1rem; }
 }
 .detail-close { display: none; }
 @media (max-width: 860px) {
@@ -334,7 +344,16 @@ button.tiny { font-size: 0.7rem; }
 .rich-editor { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .editor-toolbar {
   display: flex; flex-wrap: wrap; gap: 0.6rem; padding: 0.4rem 0; align-items: center; font-size: 0.78rem;
-  position: sticky; top: 0; background: var(--bg); z-index: 3;
+  /* Sticky formatting bar: stays in view while you scroll through long text. */
+  position: sticky; top: 0; background: var(--bg); z-index: 20;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 6px 8px -8px rgba(0, 0, 0, 0.25);
+}
+/* When the page itself is what scrolls (no scrolling panel around the
+   editor), park the bar right under the nav instead of behind it. */
+.editor-toolbar.sticks-to-window {
+  top: var(--nav-visible-h, var(--nav-height, 58px));
+  transition: top 0.22s ease;
 }
 .editor-toolbar button, .editor-toolbar select { background: none; border: none; color: var(--muted); padding: 0.1rem 0.15rem; }
 .editor-toolbar select { border-bottom: 1px solid var(--border); border-radius: 0; }
@@ -551,6 +570,37 @@ button.tiny { font-size: 0.7rem; }
 .site-nav.nav-hidden { transform: translateY(-100%); }
 .app-shell { padding-top: var(--nav-height, 58px); }
 
+/* ---- Desktop-only nav controls: pin + minimize (rendered only on desktop) ---- */
+.nav-desk-controls {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  padding-right: 0.7rem; margin-right: 0.05rem; border-right: 1px solid var(--border);
+}
+.nav-desk-controls .icon-btn { color: var(--muted); }
+.nav-desk-controls .icon-btn:hover { color: var(--accent); }
+.nav-pin-btn svg { transform: rotate(45deg); transition: transform 0.2s ease, color 0.2s ease; }
+.nav-pin-btn.active { color: var(--accent) !important; }
+.nav-pin-btn.active svg { transform: rotate(0deg); fill: currentColor; }
+.nav-min-btn svg { transition: transform 0.2s ease; }
+.nav-min-btn:hover svg { transform: translateY(-2px); }
+
+/* Small tab hanging from the top edge while the nav is minimized */
+.nav-restore-tab {
+  /* top-right corner: same side as the minimize button, and outside the
+     centred content column on most desktop widths */
+  position: fixed; top: 0; right: 18px; z-index: 45;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 46px; height: 20px; padding: 0;
+  background: var(--surface); color: var(--muted);
+  border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+  animation: navTabIn 0.25s ease 0.12s both;
+  transition: height 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.nav-restore-tab:hover, .nav-restore-tab:focus-visible { height: 26px; color: var(--accent); border-color: var(--accent); }
+.nav-restore-tab svg { width: 16px; height: 16px; }
+@keyframes navTabIn { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+@media print { .nav-restore-tab { display: none !important; } }
+
 /* ===========================================================================
    Image carousel — extra book images + featured card
    =========================================================================== */
@@ -574,8 +624,11 @@ button.tiny { font-size: 0.7rem; }
 .book-layout.sidebar-collapsed { grid-template-columns: 1fr; gap: 0; }
 .book-layout.sidebar-collapsed .book-sidebar { display: none; }
 .book-sidebar {
-  position: sticky; top: calc(var(--nav-height, 58px) + 12px); max-height: calc(100vh - var(--nav-height, 58px) - 24px);
+  position: sticky;
+  top: calc(var(--nav-visible-h, var(--nav-height, 58px)) + 12px);
+  max-height: calc(100vh - var(--nav-visible-h, var(--nav-height, 58px)) - 24px);
   overflow-y: auto; border-right: 1px solid var(--border); padding-right: 1rem;
+  transition: top 0.22s ease, max-height 0.22s ease;
 }
 .book-sidebar-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; }
 .book-sidebar-search { display: flex; align-items: center; gap: 0.4rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; margin-bottom: 0.6rem; }

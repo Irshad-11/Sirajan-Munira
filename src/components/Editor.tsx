@@ -323,7 +323,7 @@ const FONT_FAMILIES = [
   { label: 'Bangla (Hind Siliguri)', value: '"Hind Siliguri", sans-serif' },
 ];
 
-function Toolbar({ editor, imagePathPrefix }: { editor: any; imagePathPrefix: string }) {
+function Toolbar({ editor, imagePathPrefix, sticksToWindow }: { editor: any; imagePathPrefix: string; sticksToWindow?: boolean }) {
   const [showLink, setShowLink] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   if (!editor) return null;
@@ -336,7 +336,7 @@ function Toolbar({ editor, imagePathPrefix }: { editor: any; imagePathPrefix: st
   const btn = (active: boolean) => (active ? 'active' : '');
 
   return (
-    <div className="editor-toolbar">
+    <div className={`editor-toolbar ${sticksToWindow ? 'sticks-to-window' : ''}`}>
       <select
         value={editor.isActive('heading', { level: 1 }) ? 'h1' : editor.isActive('heading', { level: 2 }) ? 'h2' : editor.isActive('heading', { level: 3 }) ? 'h3' : editor.isActive('heading', { level: 4 }) ? 'h4' : 'p'}
         onChange={(e) => {
@@ -504,12 +504,45 @@ export function RichEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, editor]);
 
+  // Sticky toolbar: keep the formatting bar visible while writing long text.
+  // `position: sticky` sticks to the NEAREST scrolling ancestor. When that is
+  // a panel (e.g. the desktop .split-detail column or the mobile full-screen
+  // editor overlay) the bar should sit at the panel's own top edge (top: 0).
+  // When nothing scrolls except the page itself, the bar must instead sit
+  // just below the fixed site nav — otherwise the nav covers it. We detect
+  // which case applies (and re-check on resize, because the same panel is a
+  // sticky column on desktop and a fixed overlay on mobile).
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [sticksToWindow, setSticksToWindow] = useState(false);
+  useEffect(() => {
+    const check = () => {
+      const el = wrapRef.current;
+      if (!el) return;
+      setSticksToWindow(findScrollParent(el) === null);
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   return (
-    <div className="rich-editor">
-      <Toolbar editor={editor} imagePathPrefix={imagePathPrefix} />
+    <div className="rich-editor" ref={wrapRef}>
+      <Toolbar editor={editor} imagePathPrefix={imagePathPrefix} sticksToWindow={sticksToWindow} />
       <EditorContent editor={editor} className="rt-content editable" />
     </div>
   );
+}
+
+/** Nearest ancestor that clips/scrolls its content (and therefore becomes the
+ *  reference box for a `position: sticky` child), or null for the page. */
+function findScrollParent(el: HTMLElement): HTMLElement | null {
+  let p: HTMLElement | null = el.parentElement;
+  while (p && p !== document.body && p !== document.documentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if (oy === 'auto' || oy === 'scroll' || oy === 'overlay' || oy === 'hidden') return p;
+    p = p.parentElement;
+  }
+  return null;
 }
 
 export function recoverAutosave(key: string): RichDoc | null {
