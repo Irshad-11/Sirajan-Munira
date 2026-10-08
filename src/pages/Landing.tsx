@@ -784,7 +784,7 @@ function DevCredit() {
         <span className="dev-credit__ring" />
         <span className="dev-credit__mono">IH</span>
       </div>
-      <p className="dev-credit__label">Developer and Maintained</p>
+      <p className="dev-credit__label">Develop and Maintained by</p>
       <p className="dev-credit__name">Irshad Hossain</p>
       <span className="dev-credit__rule" aria-hidden="true" />
       <div className="dev-credit__roles">
