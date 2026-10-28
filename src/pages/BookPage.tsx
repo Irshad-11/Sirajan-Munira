@@ -436,7 +436,10 @@ function HeadingEditorPanel({ book, panel, nextSortOrder, onClose, onSaved }: {
   };
 
   return (
-    <div className="split-detail">
+    <>
+    {/* small screens: the form floats as a sheet with breathing room above and below */}
+    <div className="bp-editor-backdrop" aria-hidden="true" />
+    <div className="split-detail bp-editor-panel" role="dialog" aria-label={isEdit ? 'Edit heading' : 'New heading'}>
       <button className="link-btn detail-close" onClick={onClose}>← Close</button>
       <h3>{isEdit ? 'Edit heading' : 'New heading'}</h3>
       {!isEdit && (
@@ -459,6 +462,7 @@ function HeadingEditorPanel({ book, panel, nextSortOrder, onClose, onSaved }: {
         <button className="secondary" onClick={onClose}>Cancel</button>
       </div>
     </div>
+    </>
   );
 }
 
@@ -496,13 +500,26 @@ function BookSidebar({
     return () => clearTimeout(t);
   }, [query, bookId, index]);
 
+  const asideRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const box = asideRef.current;
+    if (!box || !currentId) return;
+    const item = box.querySelector<HTMLElement>('.sidebar-item--current');
+    if (!item) return;
+    const b = box.getBoundingClientRect(), r = item.getBoundingClientRect();
+    const pad = 48;
+    if (r.top < b.top + pad || r.bottom > b.bottom - pad) {
+      box.scrollTo({ top: box.scrollTop + (r.top - b.top) - box.clientHeight / 2 + r.height / 2, behavior: 'smooth' });
+    }
+  }, [currentId]);
+
   let filtered = showBookmarksOnly ? index.filter((h) => bookmarks.includes(h.id)) : index;
   if (matchIds) filtered = filtered.filter((h) => matchIds.has(h.id));
 
   return (
     <>
       {mobileOpen && <div className="book-sidebar-backdrop" onClick={onCloseMobile} />}
-      <aside className="book-sidebar" aria-label="Findings in this book">
+      <aside className="book-sidebar" aria-label="Findings in this book" ref={asideRef}>
         <div className="book-sidebar-head">
           <strong className="icon-row"><ListTree size={15} /> Findings <span className="muted bp-count">{index.length}</span></strong>
           <button className="bp-sidebar-close" onClick={onCloseMobile} aria-label="Close findings list">
@@ -990,19 +1007,34 @@ function BookPageInner() {
   // ---- Scroll spy + remember position ----
   useEffect(() => {
     if (!slug || !shown) return;
+    let raf = 0;
     const handler = () => {
-      const limit = navHeight() + 40;
-      let found: string | null = null;
-      for (const id of orderRef.current.slice(0, shownRef.current)) {
-        const el = document.getElementById(id);
-        if (!el) continue;
-        if (el.getBoundingClientRect().top <= limit) found = id; else break;
-      }
-      setCurrentHeadingId(found);
-      if (found) { try { localStorage.setItem(`sm_last_h_${slug}`, found); } catch {} }
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const ids = orderRef.current.slice(0, shownRef.current);
+        const vh = window.innerHeight;
+        const top = navHeight() + 40;
+        // Short findings at the very end can never scroll up to the activation
+        // line, so in the last screenful of the page the line slides down
+        // towards the bottom of the viewport. At the bottom of the page every
+        // finding that is on screen has been passed → the last one is current.
+        const remaining = Math.max(0, document.documentElement.scrollHeight - (window.scrollY + vh));
+        const span = Math.max(1, vh - top);
+        const limit = remaining < span ? top + (span - remaining) - 8 : top;
+        let found: string | null = null;
+        for (const id of ids) {
+          const el = document.getElementById(id);
+          if (!el) continue;
+          if (el.getBoundingClientRect().top <= limit) found = id; else break;
+        }
+        setCurrentHeadingId(found);
+        if (found) { try { localStorage.setItem(`sm_last_h_${slug}`, found); } catch {} }
+      });
     };
+    handler();
     window.addEventListener('scroll', handler, { passive: true });
-    return () => window.removeEventListener('scroll', handler);
+    window.addEventListener('resize', handler);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('scroll', handler); window.removeEventListener('resize', handler); };
   }, [slug, shown]);
 
   // ---- Admin refresh after edits ----
@@ -1352,6 +1384,25 @@ const BOOK_PAGE_CSS = `
 [data-hscale="h1-as-h2"] .rt-content h1 { font-size: 1.35rem; }
 [data-hscale="reduced"] .rt-content h1 { font-size: 1.5rem; }
 [data-hscale="reduced"] .rt-content h2 { font-size: 1.2rem; }
+
+/* ── New / edit finding form ─────── */
+.bp-editor-backdrop { display: none; }
+@media (max-width: 860px) {
+  .bp-editor-backdrop { display: block; position: fixed; inset: 0; z-index: 249; background: rgba(0,0,0,.42); animation: bpFade .18s ease; }
+  .split-detail.bp-editor-panel {
+    inset: auto; left: 12px; right: 12px;
+    top: max(14px, calc(env(safe-area-inset-top, 0px) + 4vh));
+    bottom: max(14px, calc(env(safe-area-inset-bottom, 0px) + 4vh));
+    max-height: none; border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.35); overscroll-behavior: contain;
+    animation: bpSheetIn .22s cubic-bezier(.2,.7,.2,1);
+  }
+}
+@media (max-width: 860px) and (min-width: 561px) {
+  .split-detail.bp-editor-panel { left: 50%; right: auto; width: min(640px, calc(100% - 48px)); transform: translateX(-50%); animation: bpFade .2s ease; }
+}
+@keyframes bpFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bpSheetIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
 /* ── Sidebar ──────────────────────── */
 .bp-count { font-weight: 400; font-size: 0.76rem; }

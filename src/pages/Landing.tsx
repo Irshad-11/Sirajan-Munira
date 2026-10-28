@@ -12,283 +12,20 @@ import { Book, Category, getLiveStats, listBooks, listCategories, getSiteSetting
 import { ContactForm } from './StaticPages';
 import { SearchBox } from '../components/SearchBox';
 import { CuratorNote } from '../components/Disclaimer';
+import { AuthorQuote } from '../components/AuthorQuote';
 
 // ---------------------------------------------------------------------------
-// Animated Hero SVG
+// Animated hero: lamp + book scene (artwork + GSAP timeline in
+// components/LampBookScene). Lazy-loaded so the ~250 KB of vector artwork
+// never delays the rest of the landing page.
 // ---------------------------------------------------------------------------
-function AnimatedHeroSVG() {
-  const rayAngles = [0, 45, 90, 135, 180, 225, 270, 315];
+const LampBookScene = React.lazy(() => import('../components/LampBookScene/LampBookScene'));
+
+function AnimatedHeroScene() {
   return (
-    <svg
-      className="hero-svg"
-      width="260"
-      height="140"
-      viewBox="0 0 260 140"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      role="img"
-      aria-label="A book with pages turning beside a lamp that cycles from sunrise to a full moon"
-    >
-      <style>{`
-        /* ================= BOOK: highlight sweeps (left→right wipe) ================= */
-        .shm-hlA-left  { animation: shmHlAL 20s ease-in-out infinite; transform-box: fill-box; transform-origin: left center; }
-        .shm-hlA-right { animation: shmHlAR 20s ease-in-out infinite; transform-box: fill-box; transform-origin: left center; }
-        .shm-hlB-left  { animation: shmHlBL 20s ease-in-out infinite; transform-box: fill-box; transform-origin: left center; }
-        .shm-hlB-right { animation: shmHlBR 20s ease-in-out infinite; transform-box: fill-box; transform-origin: left center; }
-
-        @keyframes shmHlAL {
-          0%, 1.9%  { opacity: 0; transform: scaleX(0); }
-          2%        { opacity: 1; transform: scaleX(0); }
-          8%        { opacity: 1; transform: scaleX(1); }
-          18%       { opacity: 1; transform: scaleX(1); }
-          19%       { opacity: 0; transform: scaleX(1); }
-          100%      { opacity: 0; transform: scaleX(0); }
-        }
-        @keyframes shmHlAR {
-          0%, 19.9% { opacity: 0; transform: scaleX(0); }
-          20%       { opacity: 1; transform: scaleX(0); }
-          26%       { opacity: 1; transform: scaleX(1); }
-          36%       { opacity: 1; transform: scaleX(1); }
-          37%       { opacity: 0; transform: scaleX(1); }
-          100%      { opacity: 0; transform: scaleX(0); }
-        }
-        @keyframes shmHlBL {
-          0%, 43.9% { opacity: 0; transform: scaleX(0); }
-          44%       { opacity: 1; transform: scaleX(0); }
-          50%       { opacity: 1; transform: scaleX(1); }
-          60%       { opacity: 1; transform: scaleX(1); }
-          61%       { opacity: 0; transform: scaleX(1); }
-          100%      { opacity: 0; transform: scaleX(0); }
-        }
-        @keyframes shmHlBR {
-          0%, 61.9% { opacity: 0; transform: scaleX(0); }
-          62%       { opacity: 1; transform: scaleX(0); }
-          68%       { opacity: 1; transform: scaleX(1); }
-          78%       { opacity: 1; transform: scaleX(1); }
-          79%       { opacity: 0; transform: scaleX(1); }
-          100%      { opacity: 0; transform: scaleX(0); }
-        }
-
-        /* ================= BOOK: page flip (right side), twice per loop ================= */
-        .shm-flip-page {
-          transform-box: fill-box;
-          transform-origin: left center;
-          animation: shmFlip 20s ease-in-out infinite;
-        }
-        @keyframes shmFlip {
-          0%, 37.9% { transform: scaleX(1) skewY(0deg); }
-          38%       { transform: scaleX(1) skewY(0deg); }
-          40%       { transform: scaleX(0.02) skewY(3deg); }
-          42%       { transform: scaleX(1) skewY(0deg); }
-          79.9%     { transform: scaleX(1) skewY(0deg); }
-          82%       { transform: scaleX(0.02) skewY(-3deg); }
-          84%, 100% { transform: scaleX(1) skewY(0deg); }
-        }
-        .shm-page-shadow {
-          transform-box: fill-box;
-          animation: shmShadow 20s ease-in-out infinite;
-        }
-        @keyframes shmShadow {
-          0%   { opacity: 0; }
-          37%  { opacity: 0; }
-          40%  { opacity: 0.35; }
-          43%  { opacity: 0; }
-          79%  { opacity: 0; }
-          82%  { opacity: 0.35; }
-          85%  { opacity: 0; }
-          100% { opacity: 0; }
-        }
-
-        /* content-set A / B swap, timed to the flip midpoints */
-        .shm-setA { animation: shmSetA 20s ease-in-out infinite; }
-        .shm-setB { animation: shmSetB 20s ease-in-out infinite; }
-        @keyframes shmSetA {
-          0%, 39%   { opacity: 1; }
-          40%, 81%  { opacity: 0; }
-          82%, 100% { opacity: 1; }
-        }
-        @keyframes shmSetB {
-          0%, 39%   { opacity: 0; }
-          40%, 81%  { opacity: 1; }
-          82%, 100% { opacity: 0; }
-        }
-
-        /* ================= LAMP: day / night crossfade ================= */
-        .shm-sun-fade  { animation: shmSunFade 40s ease-in-out infinite; }
-        .shm-moon-fade { animation: shmMoonFade 40s ease-in-out infinite; }
-        @keyframes shmSunFade {
-          0%, 35%  { opacity: 1; }
-          40%, 95% { opacity: 0; }
-          100%     { opacity: 1; }
-        }
-        @keyframes shmMoonFade {
-          0%, 35%  { opacity: 0; }
-          40%, 95% { opacity: 1; }
-          100%     { opacity: 0; }
-        }
-        .shm-halo-day {
-          transform-box: fill-box; transform-origin: center;
-          animation: shmSunFade 40s ease-in-out infinite, shmPulse 3.2s ease-in-out infinite;
-        }
-        .shm-halo-night {
-          transform-box: fill-box; transform-origin: center;
-          animation: shmMoonFade 40s ease-in-out infinite, shmPulse 3.6s ease-in-out infinite;
-        }
-        @keyframes shmPulse {
-          0%, 100% { transform: scale(1); }
-          50%      { transform: scale(1.2); }
-        }
-        .shm-cone-day   { animation: shmSunFade 40s ease-in-out infinite; }
-        .shm-cone-night { animation: shmMoonFade 40s ease-in-out infinite; }
-
-        .shm-rays-rotate {
-          transform-box: fill-box; transform-origin: center;
-          animation: shmRotate 24s linear infinite;
-        }
-        @keyframes shmRotate { to { transform: rotate(360deg); } }
-
-        .shm-star { animation: shmTwinkle 2.4s ease-in-out infinite; }
-        @keyframes shmTwinkle {
-          0%, 100% { opacity: 0.25; }
-          50%      { opacity: 1; }
-        }
-
-        .shm-spark { animation: shmSparkFloat 2.4s ease-in-out infinite; }
-        @keyframes shmSparkFloat {
-          0%, 100% { transform: translateY(0); opacity: 0.7; }
-          50%      { transform: translateY(-8px); opacity: 0.15; }
-        }
-      `}</style>
-
-      {/* ============ LAMP ============ */}
-      <g transform="translate(213,40)">
-        <ellipse className="shm-halo-day" cx="0" cy="0" rx="26" ry="26" fill="#ffd166" opacity="0.18" />
-        <ellipse className="shm-halo-night" cx="0" cy="0" rx="22" ry="22" fill="#8fc7ff" opacity="0.2" />
-
-        {/* Sun: rises, arcs up, sets — with a warm → bright → warm color shift */}
-        <g className="shm-sun-fade">
-          <g>
-            <animateMotion
-              path="M -18,14 Q 0,-22 18,14"
-              keyTimes="0;0.35;1"
-              keyPoints="0;1;1"
-              dur="40s"
-              repeatCount="indefinite"
-            />
-            <circle r="7" fill="#ff8c42">
-              <animate
-                attributeName="fill"
-                values="#ff8c42;#ffd60a;#ff8c42;#ff8c42"
-                keyTimes="0;0.175;0.35;1"
-                dur="40s"
-                repeatCount="indefinite"
-              />
-            </circle>
-            <g className="shm-rays-rotate">
-              {rayAngles.map((deg) => {
-                const rad = (deg * Math.PI) / 180;
-                return (
-                  <line
-                    key={deg}
-                    x1={Math.cos(rad) * 10}
-                    y1={Math.sin(rad) * 10}
-                    x2={Math.cos(rad) * 14}
-                    y2={Math.sin(rad) * 14}
-                    stroke="#ffb703"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                );
-              })}
-            </g>
-          </g>
-        </g>
-
-        {/* Moon: waxes crescent → first quarter → gibbous → full, then fades out */}
-        <g className="shm-moon-fade">
-          <circle r="9" fill="#0f172a" />
-          <circle r="7" fill="#e9f2ff" />
-          <circle cx="14" r="7" fill="#0f172a">
-            <animate
-              attributeName="cx"
-              values="14;3.5;3.5;7;7;10.5;10.5;14;14"
-              keyTimes="0;0.4;0.5;0.62;0.72;0.84;0.92;0.95;1"
-              dur="40s"
-              repeatCount="indefinite"
-            />
-          </circle>
-          {[[-11, -8], [10, -10], [13, 4]].map(([x, y], i) => (
-            <circle
-              key={i}
-              className="shm-star"
-              cx={x}
-              cy={y}
-              r="1.1"
-              fill="#e6f0ff"
-              style={{ animationDelay: `${i * 0.6}s` }}
-            />
-          ))}
-        </g>
-      </g>
-
-      {/* Lamp hardware (static) */}
-      <ellipse cx="195" cy="118" rx="22" ry="6" fill="var(--border)" />
-      <rect x="192" y="56" width="6" height="62" rx="3" fill="var(--muted)" />
-      <path d="M195 56 C195 40, 215 30, 218 20" stroke="var(--muted)" strokeWidth="3" strokeLinecap="round" fill="none" />
-      <path d="M205 14 L230 26 L210 42 L196 42 Z" fill="var(--accent)" opacity="0.88" />
-      <ellipse cx="213" cy="42" rx="9" ry="3.5" fill="var(--surface)" stroke="var(--accent)" strokeWidth="1" />
-
-      {/* Light cone on the desk, warm by day / cool by night */}
-      <path className="shm-cone-day" d="M205 44 L148 130 L180 130 Z" fill="#ffd166" opacity="0.09" />
-      <path className="shm-cone-night" d="M205 44 L148 130 L180 130 Z" fill="#8fc7ff" opacity="0.08" />
-
-      {/* ============ BOOK ============ */}
-      <rect x="18" y="60" width="130" height="76" rx="3" fill="var(--surface)" stroke="var(--border)" strokeWidth="1.5" />
-      <line x1="83" y1="60" x2="83" y2="136" stroke="var(--border)" strokeWidth="2" />
-      <rect className="shm-page-shadow" x="83" y="60" width="12" height="76" fill="#000" />
-
-      {/* ---- Left page, set A ---- */}
-      <g className="shm-setA">
-        {[75, 85, 95, 105, 115, 125].map((y) => (
-          <line key={y} x1="28" y1={y} x2="74" y2={y} stroke="var(--border)" strokeWidth="1" />
-        ))}
-        <rect className="shm-hlA-left" x="28" y="81" width="46" height="8" rx="1.5" fill="#ffe066" />
-      </g>
-      {/* ---- Left page, set B ---- */}
-      <g className="shm-setB">
-        {[78, 90, 102, 114, 126].map((y, i) => {
-          const w = [40, 46, 34, 46, 20][i];
-          return <line key={y} x1="28" y1={y} x2={28 + w} y2={y} stroke="var(--border)" strokeWidth="1" />;
-        })}
-        <rect className="shm-hlB-left" x="28" y="98" width="34" height="8" rx="1.5" fill="#ffe066" />
-      </g>
-
-      {/* ---- Right page, flips; content set swaps underneath the flip ---- */}
-      <g className="shm-flip-page">
-        <g className="shm-setA">
-          {[75, 85, 95, 105, 115, 125].map((y, i) => {
-            const w = [40, 35, 42, 30, 38, 22][i];
-            return <line key={y} x1="92" y1={y} x2={92 + w} y2={y} stroke="var(--border)" strokeWidth="1" />;
-          })}
-          <rect className="shm-hlA-right" x="92" y="91" width="42" height="8" rx="1.5" fill="#ffe066" />
-        </g>
-        <g className="shm-setB">
-          {[73, 82, 91, 100, 109, 118, 127].map((y, i) => {
-            const w = [30, 38, 42, 25, 35, 40, 18][i];
-            return <line key={y} x1="92" y1={y} x2={92 + w} y2={y} stroke="var(--border)" strokeWidth="1" />;
-          })}
-          <rect className="shm-hlB-right" x="92" y="96" width="25" height="8" rx="1.5" fill="#ffe066" />
-        </g>
-      </g>
-
-      {/* Bookmark ribbon */}
-      <path d="M152 60 L152 100 L146 95 L140 100 L140 60 Z" fill="var(--accent)" opacity="0.6" />
-
-      {/* Floating reading sparkles */}
-      <circle className="shm-spark" cx="172" cy="70" r="2" fill="var(--accent)" style={{ animationDelay: '0s' }} />
-      <circle className="shm-spark" cx="162" cy="52" r="1.5" fill="var(--accent)" style={{ animationDelay: '0.5s' }} />
-      <circle className="shm-spark" cx="180" cy="85" r="1.5" fill="var(--accent)" style={{ animationDelay: '1s' }} />
-    </svg>
+    <React.Suspense fallback={<div className="lnd-scene-ph" aria-hidden="true" />}>
+      <LampBookScene />
+    </React.Suspense>
   );
 }
 // ---------------------------------------------------------------------------
@@ -790,11 +527,10 @@ function DevCredit() {
       <div className="dev-credit__roles">
         <span><Code size={12} /> Developer</span>
         <span><Wrench size={12} /> Maintainer</span>
-        <span><Feather size={12} /> Curator</span>
+        <span><Feather size={12} /> Editor</span>
       </div>
-      <p className="dev-credit__note">
-        এই সাইটের প্রতিটি বই, প্রতিটি finding আর কোডের প্রতিটি লাইন একজন মানুষের হাতে তৈরি ও দেখাশোনা করা।
-      </p>
+      
+      <div className="dev-credit__quote"><AuthorQuote compact /></div>
       <div className="dev-credit__links">
         <Link to="/about">প্রজেক্ট সম্পর্কে <ArrowRight size={12} /></Link>
         <a href="https://irshad-11.github.io/Safeenah/" target="_blank" rel="noopener noreferrer">Safeenah <ArrowUpRight size={12} /></a>
@@ -909,7 +645,7 @@ export default function Landing() {
             <Link to="/collections" className="cta-secondary"><FolderOpen size={16} /> Collections</Link>
           </div>
         </div>
-        <div className="lnd-hero__right"><AnimatedHeroSVG /></div>
+        <div className="lnd-hero__right"><AnimatedHeroScene /></div>
       </div>
 
       {/* Stats */}
@@ -1053,9 +789,18 @@ const LANDING_CSS = `
 @media(max-width:600px){ .lnd-search{ margin-left:auto; margin-right:auto; width:100%; } .lnd-search-hint{ text-align:center; } .lnd-hero .hero-cta{ justify-content:center; } .lnd-hero__left{ width:100%; } }
 .lnd-hero { display:flex; align-items:center; justify-content:space-between; gap:1.5rem; flex-wrap:wrap; text-align:left; padding:3.5rem 1.4rem 2.8rem; }
 .lnd-hero__left { max-width:480px; }
-.lnd-hero__right { flex-shrink:0; }
+.lnd-hero__right { flex:1 1 380px; min-width:0; max-width:734px; }
+.lnd-scene-ph { width:100%; aspect-ratio:13.84/7.1; }
+/* Desktop: the scene may grow past the 1080px column, out to the screen's right edge */
+@media(min-width:1081px){ .lnd-hero{ flex-wrap:nowrap; } .lnd-hero__left{ flex:0 0 auto; }
+  .lnd-hero__right{ margin-right:calc((1080px - 100vw) / 2 - 1.4rem + 12px); }
+  /* the hero's tint runs edge to edge so the wider scene has no seam beside it */
+  .lnd-hero{ position:relative; isolation:isolate; background:transparent; }
+  .lnd-hero::before{ content:''; position:absolute; top:0; bottom:0; left:50%; width:100vw; transform:translateX(-50%); z-index:-1; pointer-events:none;
+    background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, var(--bg)), var(--bg)); }
+  body:has(.landing-page){ overflow-x:clip; } }
 .lnd-eyebrow { font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.2em; color:var(--accent); margin-bottom:.5rem; }
-@media(max-width:600px){ .lnd-hero{flex-direction:column;text-align:center;align-items:center;} .lnd-hero__right{display:block;} }
+@media(max-width:600px){ .lnd-hero{flex-direction:column;text-align:center;align-items:center;} .lnd-hero__right{display:block; width:calc(100% + 2.8rem); max-width:none; margin:0 -1.4rem; flex-basis:auto;} }
 
 .lnd-stats-bar { display:flex; align-items:center; justify-content:center; gap:0; padding:.9rem 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
 .lnd-stat { text-align:center; padding:0 1.8rem; }
@@ -1356,6 +1101,7 @@ const LANDING_CSS = `
 .dev-credit__roles span { display:inline-flex; align-items:center; gap:.3rem; padding:.28rem .75rem; border-radius:999px; font-size:.82rem; font-weight:600;
   color:var(--accent); background:color-mix(in srgb, var(--accent) 9%, var(--surface)); border:1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
 .dev-credit__note { margin:0 auto 1rem; max-width:440px; font-size:.92rem; color:var(--muted); line-height:1.65; }
+.dev-credit__quote { max-width:520px; margin:0 auto 1.1rem; }
 .dev-credit__links { display:flex; justify-content:center; gap:1.2rem; flex-wrap:wrap; }
 .dev-credit__links a { display:inline-flex; align-items:center; gap:.25rem; font-size:.88rem; font-weight:600; color:var(--fg);
   text-decoration:none; border-bottom:1px solid var(--border); padding-bottom:1px; transition:color .2s, border-color .2s; }

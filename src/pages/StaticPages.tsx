@@ -11,6 +11,8 @@ import {
 import { useAdmin, useTrackView } from '../lib/context';
 import { SAFEENAH_URL } from '../components/Layout';
 import { CuratorNote } from '../components/Disclaimer';
+import { AuthorQuote } from '../components/AuthorQuote';
+import { CalligraphyBanner } from '../components/CalligraphyBanner';
 
 interface FaqEntry { id: string; q: string; a: ReactNode; }
 
@@ -430,6 +432,7 @@ export function AboutPage() {
   return (
     <div className="page about-page sjm-about" ref={rootRef}>
       <style>{STATIC_PAGE_CSS}</style>
+      <CalligraphyBanner />
       <section className="sjm-hero" data-sjm-reveal>
         <div className="sjm-hero-rule" aria-hidden="true" />
         <p className="sjm-eyebrow">An Imprint of Safeenah</p>
@@ -669,6 +672,7 @@ export function AboutPage() {
             <blockquote>
               &quot;Safeenah taught me how much gets lost between a page and a memory. Sirājan Munīrā is what I built so the notes I take while reading don't disappear the same way — so a useful finding can have its own address and outlive the notebook it was first written in.&quot;
             </blockquote>
+            <div className="sjm-founder-maxim"><AuthorQuote attribution={null} /></div>
           </div>
         </div>
       </section>
@@ -975,7 +979,9 @@ const STATIC_PAGE_CSS = `
 .sjm-founder-avatar { width: 58px; height: 58px; display: grid; place-items: center; border: 2px solid var(--accent); border-radius: 50%; color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); font-family: var(--font-serif), Georgia, serif; font-size: 1.2rem; font-weight: 700; }
 .sjm-founder-name { margin-bottom: .15rem; color: var(--fg); font-family: var(--font-serif), Georgia, serif; font-size: 1rem; font-weight: 700; }
 .sjm-founder-role { margin-bottom: .8rem; color: var(--accent); font-size: .53rem; font-weight: 700; text-transform: uppercase; letter-spacing: .16em; }
-.sjm-founder-card blockquote { margin: 0; color: var(--muted); font-family: var(--font-serif), Georgia, serif; font-size: clamp(.92rem, 1.8vw, 1.03rem); font-style: italic; line-height: 1.85; }
+.sjm-founder-maxim { margin-top: 1rem; }
+.sjm-founder-maxim .aq__text { font-style: italic; }
+.sjm-founder-card > div > blockquote { margin: 0; color: var(--muted); font-family: var(--font-serif), Georgia, serif; font-size: clamp(.92rem, 1.8vw, 1.03rem); font-style: italic; line-height: 1.85; }
 .sjm-contact-form { max-width: 520px; }
 .sjm-form-success { display: flex; align-items: flex-start; gap: .7rem; max-width: 520px; padding: .9rem 1rem; border: 1px solid var(--border); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); color: var(--fg); }
 .sjm-form-success > svg { color: var(--accent); margin-top: .1rem; }

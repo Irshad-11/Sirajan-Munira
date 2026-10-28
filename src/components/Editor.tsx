@@ -536,7 +536,11 @@ export function RichEditor({
 /** Nearest ancestor that clips/scrolls its content (and therefore becomes the
  *  reference box for a `position: sticky` child), or null for the page. */
 function findScrollParent(el: HTMLElement): HTMLElement | null {
-  let p: HTMLElement | null = el.parentElement;
+  // Start with the editor wrapper itself: when IT clips (e.g. the Drafts pane,
+  // where only the text area scrolls) it is the sticky reference box, and the
+  // bar must stay at its own top edge — offsetting it by the nav height there
+  // pushed the bar down over the first lines of text.
+  let p: HTMLElement | null = el;
   while (p && p !== document.body && p !== document.documentElement) {
     const oy = getComputedStyle(p).overflowY;
     if (oy === 'auto' || oy === 'scroll' || oy === 'overlay' || oy === 'hidden') return p;

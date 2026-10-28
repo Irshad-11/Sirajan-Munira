@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Plus, Pencil, Trash2, ExternalLink, ChevronRight, Star, Eye, EyeOff, Loader2, ArrowLeft,
+  FolderOpen, FileText, BookOpen, CalendarDays, X,
 } from 'lucide-react';
 import {
   Category, CategoryHeadingDetail, CategoryStats, createCategory, deleteCategory, getCategory,
@@ -23,9 +24,21 @@ function fmtDate(d?: string) {
 }
 function plural(n: number, one: string, many = `${one}s`) { return `${n} ${n === 1 ? one : many}`; }
 
-function statsLine(s?: CategoryStats) {
-  if (!s) return null;
-  return `${plural(s.entryCount, 'finding')} from ${plural(s.bookCount, 'book')} · ${plural(s.viewCount, 'visit')}`;
+/** Findings · books · visits as small labelled chips (the facts that matter, not the colour). */
+function StatChips({ s, updated }: { s?: CategoryStats; updated?: string }) {
+  if (!s) return <span className="skeleton-pulse" style={{ display: 'inline-block', width: 180, height: 10 }} />;
+  return (
+    <span className="cl-chips">
+      <span className="cl-chip"><FileText size={12} aria-hidden="true" /> {plural(s.entryCount, 'finding')}</span>
+      <span className="cl-chip"><BookOpen size={12} aria-hidden="true" /> {plural(s.bookCount, 'book')}</span>
+      <span className="cl-chip"><Eye size={12} aria-hidden="true" /> {plural(s.viewCount, 'visit')}</span>
+      {updated && <span className="cl-chip cl-chip--quiet"><CalendarDays size={12} aria-hidden="true" /> Updated {fmtDate(updated)}</span>}
+    </span>
+  );
+}
+
+function readHScale(): string {
+  try { return localStorage.getItem('sm_hscale') || 'default'; } catch { return 'default'; }
 }
 
 /** Title = first block of the finding; excerpt = the text after it. */
@@ -120,9 +133,10 @@ function AdminActions({ c, h }: { c: Category; h: AdminHandlers }) {
 
 function FeaturedCard({ c, stats, isAdmin, h }: { c: Category; stats?: CategoryStats; isAdmin: boolean; h: AdminHandlers }) {
   return (
-    <article className={`cl-feat ${!c.visibility ? 'is-hidden' : ''}`} style={{ ['--cc' as any]: c.color }}>
+    <article className={`cl-feat ${!c.visibility ? 'is-hidden' : ''}`}>
       <Link to={`/collections/${c.id}`} className="cl-feat-banner" tabIndex={-1} aria-hidden="true">
-        {c.banner_image_url ? <img src={c.banner_image_url} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} /> : <span className="cl-feat-banner-ph" />}
+        {c.banner_image_url ? <img src={c.banner_image_url} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+          : <span className="cl-feat-banner-ph"><FolderOpen size={26} /><span className="cl-feat-banner-count">{stats ? plural(stats.entryCount, 'finding') : ''}</span></span>}
       </Link>
       <div className="cl-feat-body">
         <div className="cl-feat-top">
@@ -131,12 +145,9 @@ function FeaturedCard({ c, stats, isAdmin, h }: { c: Category; stats?: CategoryS
         </div>
         <h3 className="cl-feat-title"><Link to={`/collections/${c.id}`}>{c.name}</Link></h3>
         {c.description && <p className="cl-feat-desc">{c.description}</p>}
-        <p className="cl-stats">
-          {stats ? statsLine(stats) : <span className="skeleton-pulse" style={{ display: 'inline-block', width: 180, height: 10 }} />}
-        </p>
+        <p className="cl-stats"><StatChips s={stats} updated={c.updated_at} /></p>
         <div className="cl-feat-foot">
           <Link to={`/collections/${c.id}`} className="cl-open">Open collection <ChevronRight size={14} /></Link>
-          {c.updated_at && <span className="muted cl-date">Updated {fmtDate(c.updated_at)}</span>}
         </div>
         {isAdmin && <AdminActions c={c} h={h} />}
       </div>
@@ -152,14 +163,17 @@ function CollectionRow({ c, stats, isAdmin, h }: { c: Category; stats?: Category
   return (
     <li className={`cl-row ${!c.visibility ? 'is-hidden' : ''}`}>
       <Link to={`/collections/${c.id}`} className="cl-row-link">
-        <span className="cl-row-dot" style={{ background: c.color }} aria-hidden="true" />
+        <span className="cl-row-count" aria-hidden="true">
+          <strong>{stats ? stats.entryCount : '–'}</strong>
+          <small>{stats && stats.entryCount === 1 ? 'finding' : 'findings'}</small>
+        </span>
         <span className="cl-row-main">
           <span className="cl-row-title">
             {c.name}
             {!c.visibility && <span className="cl-badge cl-badge--hidden">Hidden</span>}
           </span>
-          {c.description && <span className="cl-row-desc">{c.description}</span>}
-          <span className="cl-stats">{stats ? statsLine(stats) : ' '}</span>
+          {c.description ? <span className="cl-row-desc">{c.description}</span> : <span className="cl-row-desc cl-row-desc--none">No description yet.</span>}
+          <span className="cl-stats"><StatChips s={stats} updated={c.updated_at} /></span>
         </span>
         <ChevronRight size={16} className="cl-row-chev" aria-hidden="true" />
       </Link>
@@ -172,7 +186,7 @@ function RowSkeleton() {
   return (
     <li className="cl-row" aria-hidden="true">
       <div className="cl-row-link">
-        <span className="skeleton-pulse cl-row-dot" />
+        <span className="skeleton-pulse cl-row-count" />
         <span className="cl-row-main" style={{ width: '100%' }}>
           <span className="skeleton-pulse sk-line lg" style={{ width: '40%', display: 'block' }} />
           <span className="skeleton-pulse sk-line" style={{ width: '75%', display: 'block' }} />
@@ -270,10 +284,11 @@ export function CollectionsList() {
       <div className="page-head cl-head">
         <div>
           <h1>Collections</h1>
-          <p className="muted cl-intro">
-            {state === 'loading' ? 'Loading collections…' : `${plural(count, 'collection')}. `}
-            Each collection gathers findings on one theme from across different books.
+          <p className="cl-intro">
+            A collection brings together findings on <strong>one theme</strong> from across different books — so you can
+            read everything recorded on a subject in one place. Every finding still points back to its own book and page.
           </p>
+          <p className="muted cl-intro-meta">{state === 'loading' ? 'Loading collections…' : plural(count, 'collection')}</p>
         </div>
         {isAdmin && <button className="primary icon-row" onClick={() => setEditing('new')}><Plus size={16} /> New collection</button>}
       </div>
@@ -395,6 +410,14 @@ export function CategoryDetail() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Esc closes the side panel.
+  useEffect(() => {
+    if (!selected) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelected(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [selected]);
+
   useEffect(() => {
     const el = sentinel.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
@@ -421,7 +444,7 @@ export function CategoryDetail() {
     <div className="page collection-detail-page">
       <style>{COLLECTIONS_CSS}</style>
 
-      <header className="cd-head" style={category ? { ['--cc' as any]: category.color } : undefined}>
+      <header className="cd-head">
         <Link to="/collections" className="cd-back"><ArrowLeft size={14} /> Collections</Link>
         {catState === 'loading' ? (
           <>
@@ -430,17 +453,16 @@ export function CategoryDetail() {
           </>
         ) : category && (
           <>
-            <h1 className="cd-title"><span className="cd-title-dot" aria-hidden="true" />{category.name}</h1>
+            <p className="cd-kicker"><FolderOpen size={13} aria-hidden="true" /> Collection</p>
+            <h1 className="cd-title">{category.name}</h1>
             {desc && (
               <div className="cd-desc">
                 <p>{descExpanded || !descLong ? desc : `${desc.slice(0, 240)}…`}</p>
                 {descLong && <button className="link-btn" onClick={() => setDescExpanded((v) => !v)} aria-expanded={descExpanded}>{descExpanded ? 'Read less' : 'Read more'}</button>}
               </div>
             )}
-            <p className="cl-stats cd-stats">
-              {stats ? statsLine(stats) : <span className="skeleton-pulse" style={{ display: 'inline-block', width: 200, height: 10 }} />}
-              {category.updated_at && <> · Updated {fmtDate(category.updated_at)}</>}
-            </p>
+            <p className="cl-stats cd-stats"><StatChips s={stats ?? undefined} updated={category.updated_at} /></p>
+            <p className="muted cd-howto">Click any finding to read it here in the side panel, or open it in its book.</p>
           </>
         )}
       </header>
@@ -460,10 +482,23 @@ export function CategoryDetail() {
                 const isOpen = !!expanded[heading.id];
                 const isActive = selected?.heading.id === heading.id;
                 const href = `/book/${book.slug}#${heading.id}`;
+                const open = () => setSelected(it);
                 return (
-                  <li key={heading.id} className={`cd-item ${isActive ? 'is-active' : ''}`}>
+                  <li
+                    key={heading.id}
+                    className={`cd-item ${isActive ? 'is-active' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isActive}
+                    aria-label={`Open “${title}” in the side panel`}
+                    onClick={(e) => { if (!(e.target as HTMLElement).closest('a, button')) open(); }}
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+                    }}
+                  >
                     <div className="cd-item-main">
-                      <h2 className="cd-item-title"><Link to={href}>{title}</Link></h2>
+                      <h2 className="cd-item-title">{title}</h2>
                       {body && (
                         <p className={`cd-item-excerpt ${isOpen ? 'open' : ''}`}>{body}</p>
                       )}
@@ -479,9 +514,9 @@ export function CategoryDetail() {
                             {isOpen ? 'Show less' : 'Show more'}
                           </button>
                         )}
-                        <button className="link-btn" onClick={() => setSelected(it)}>Preview</button>
+                        <button className="link-btn" onClick={open}>Preview</button>
                         <Link className="link-btn" to={href}>Read in book</Link>
-                        <Link className="link-btn cd-newtab" to={href} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> New tab</Link>
+                        <a className="link-btn cd-newtab" href={href} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> New tab</a>
                       </div>
                     </div>
                   </li>
@@ -501,21 +536,31 @@ export function CategoryDetail() {
         </div>
 
         {selected && (
-          <div className="split-detail cd-preview">
+          <div className="split-detail cd-preview" key={selected.heading.id}>
             <button className="link-btn detail-close" onClick={() => setSelected(null)}>← Close</button>
             <div className="side-panel-head">
               <div>
                 <p className="cd-preview-book">{selected.book.title}</p>
-                <p className="muted" style={{ margin: 0 }}>
-                  {[selected.book.author, selected.heading.page_number ? `p. ${selected.heading.page_number}` : null].filter(Boolean).join(' · ')}
-                </p>
+                {selected.book.author && <p className="muted" style={{ margin: 0 }}>{selected.book.author}</p>}
               </div>
               <div className="side-panel-actions">
+                <a href={`/book/${selected.book.slug}#${selected.heading.id}`} target="_blank" rel="noopener noreferrer" className="icon-row" title="Open in a new tab"><ExternalLink size={14} /> New tab</a>
                 <Link to={`/book/${selected.book.slug}#${selected.heading.id}`} className="icon-row">Read in book <ChevronRight size={14} /></Link>
-                <button className="icon-btn" onClick={() => setSelected(null)} aria-label="Close preview">✕</button>
+                <button className="icon-btn" onClick={() => setSelected(null)} aria-label="Close panel"><X size={16} /></button>
               </div>
             </div>
-            <RichTextView doc={selected.heading.content} />
+            {/* Same markup + classes the book page uses for a finding */}
+            <article className="heading-block cd-finding" data-hscale={readHScale()}>
+              {!!selected.heading.importance_level && (
+                <div className="heading-importance-display" aria-label={`Importance ${selected.heading.importance_level} of 5`}>
+                  {Array.from({ length: selected.heading.importance_level }).map((_, i) => (
+                    <Star key={i} size={11} fill="currentColor" className="heading-star" />
+                  ))}
+                </div>
+              )}
+              {selected.heading.page_number && <p className="heading-page-label">Page {selected.heading.page_number}</p>}
+              <RichTextView doc={selected.heading.content} />
+            </article>
           </div>
         )}
       </div>
@@ -529,7 +574,15 @@ export function CategoryDetail() {
 
 const COLLECTIONS_CSS = `
 .cl-head { align-items: flex-end; }
-.cl-intro { margin: 0.25rem 0 0; max-width: 620px; }
+.cl-intro { margin: 0.35rem 0 0; max-width: 640px; line-height: 1.65; color: color-mix(in srgb, var(--fg) 82%, var(--muted)); }
+.cl-intro strong { color: var(--fg); }
+.cl-intro-meta { margin: 0.3rem 0 0; font-size: 0.8rem; }
+.cl-chips { display: inline-flex; flex-wrap: wrap; gap: 0.3rem 0.4rem; }
+.cl-chip { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.12rem 0.5rem; border-radius: 999px; font-size: 0.74rem;
+  color: color-mix(in srgb, var(--fg) 80%, var(--muted)); background: color-mix(in srgb, var(--fg) 5%, var(--surface)); border: 1px solid var(--border); }
+.cl-chip svg { color: var(--accent); }
+.cl-chip--quiet { background: transparent; color: var(--muted); }
+.cl-chip--quiet svg { color: var(--muted); }
 .cl-section { margin-bottom: 2rem; }
 .cl-section-title { font-size: 0.95rem; font-weight: 700; margin: 0 0 0.9rem; display: flex; gap: 0.5rem; align-items: baseline; font-family: var(--font-english), sans-serif; }
 .cl-section-title .muted { font-weight: 400; font-size: 0.8rem; }
@@ -540,10 +593,13 @@ const COLLECTIONS_CSS = `
 
 /* Featured: banner card */
 .cl-feat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 1rem; }
-.cl-feat { display: flex; flex-direction: column; border: 1px solid var(--border); border-top: 3px solid var(--cc, var(--accent)); border-radius: 8px; overflow: hidden; background: var(--surface); }
-.cl-feat-banner { display: block; aspect-ratio: 16 / 7; background: color-mix(in srgb, var(--cc, var(--accent)) 14%, var(--bg)); }
+.cl-feat { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); transition: border-color .15s, box-shadow .2s; }
+.cl-feat:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow: 0 8px 22px -12px rgba(0,0,0,.25); }
+.cl-feat-banner { display: block; text-decoration: none; aspect-ratio: 16 / 7; background: color-mix(in srgb, var(--fg) 4%, var(--bg)); border-bottom: 1px solid var(--border); }
 .cl-feat-banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cl-feat-banner-ph { display: block; width: 100%; height: 100%; }
+.cl-feat-banner-ph { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; color: var(--accent);
+  background-image: radial-gradient(color-mix(in srgb, var(--fg) 9%, transparent) 1px, transparent 1px); background-size: 14px 14px; }
+.cl-feat-banner-count { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
 .cl-feat-body { padding: 0.9rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.35rem; flex: 1; }
 .cl-feat-title { margin: 0; font-size: 1.1rem; line-height: 1.3; word-break: break-word; }
 .cl-feat-title a { color: var(--fg); text-decoration: none; }
@@ -553,7 +609,6 @@ const COLLECTIONS_CSS = `
 .cl-feat-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; margin-top: auto; padding-top: 0.5rem; }
 .cl-open { display: inline-flex; align-items: center; gap: 0.2rem; background: var(--accent); color: #fff; text-decoration: none; font-size: 0.84rem; font-weight: 600; padding: 0.42rem 0.9rem; border-radius: 6px; }
 .cl-open:hover { opacity: 0.9; }
-.cl-date { font-size: 0.74rem; }
 
 /* Regular: rows */
 .cl-list, .cd-list { list-style: none; margin: 0; padding: 0; }
@@ -561,12 +616,16 @@ const COLLECTIONS_CSS = `
 .cl-row-link { display: flex; align-items: flex-start; gap: 0.8rem; padding: 0.85rem 0.4rem; color: inherit; text-decoration: none; border-radius: 6px; }
 a.cl-row-link:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 a.cl-row-link:hover .cl-row-title { color: var(--accent); }
-.cl-row-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 0.45rem; }
-.cl-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.cl-row-count { width: 58px; height: 58px; flex-shrink: 0; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.cl-row-count strong { font-size: 1.25rem; line-height: 1; color: var(--accent); font-family: var(--font-serif), Georgia, serif; }
+.cl-row-count small { font-size: 0.62rem; color: var(--muted); margin-top: 0.15rem; }
+.cl-row-desc--none { font-style: italic; color: var(--muted) !important; }
+.cl-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
 .cl-row-title { font-weight: 700; font-size: 0.98rem; }
 .cl-row-desc { font-size: 0.85rem; color: color-mix(in srgb, var(--fg) 75%, var(--muted)); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .cl-row-chev { color: var(--muted); flex-shrink: 0; margin-top: 0.3rem; }
-.cl-admin { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; padding: 0 0.4rem 0.7rem 1.9rem; }
+.cl-admin { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; padding: 0 0.4rem 0.7rem 4.4rem; }
 .cl-feat .cl-admin { padding: 0.4rem 0 0; border-top: 1px dashed var(--border); margin-top: 0.4rem; }
 .cl-admin button { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.72rem; color: var(--muted); }
 .cl-admin button:hover { color: var(--accent); }
@@ -576,18 +635,21 @@ a.cl-row-link:hover .cl-row-title { color: var(--accent); }
 .cd-head { padding: 0.2rem 0 1rem; margin-bottom: 0.8rem; border-bottom: 1px solid var(--border); }
 .cd-back { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; color: var(--muted); text-decoration: none; }
 .cd-back:hover { color: var(--accent); }
-.cd-title { margin: 0.45rem 0 0.5rem; font-size: 1.6rem; font-weight: 800; line-height: 1.25; display: flex; align-items: center; gap: 0.55rem; word-break: break-word; }
-.cd-title-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--cc, var(--accent)); flex-shrink: 0; }
+.cd-kicker { margin: 0.7rem 0 0; display: flex; width: fit-content; align-items: center; gap: 0.3rem; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); }
+.cd-title { margin: 0.2rem 0 0.5rem; font-size: 1.6rem; font-weight: 800; line-height: 1.25; word-break: break-word; }
+.cd-howto { margin: 0.55rem 0 0; font-size: 0.8rem; }
 .cd-desc p { margin: 0 0 0.25rem; max-width: 720px; color: color-mix(in srgb, var(--fg) 78%, var(--muted)); }
 .cd-stats { margin-top: 0.5rem; }
 
 .cd-list { max-width: 780px; }
-.cd-item { border-bottom: 1px solid var(--border); }
-.cd-item.is-active { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.cd-item { border-bottom: 1px solid var(--border); cursor: pointer; border-radius: 6px; transition: background .15s; position: relative; }
+.cd-item:hover { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.cd-item:hover .cd-item-title { color: var(--accent); }
+.cd-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cd-item.is-active { background: color-mix(in srgb, var(--accent) 8%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
 .cd-item-main { padding: 1rem 0.4rem; }
 .cd-item-title { margin: 0 0 0.35rem; font-size: 1.06rem; font-weight: 700; line-height: 1.4; font-family: var(--font-serif), 'Hind Siliguri', Georgia, serif; word-break: break-word; }
-.cd-item-title a { color: var(--fg); text-decoration: none; }
-.cd-item-title a:hover { color: var(--accent); }
+.cd-item-title { transition: color .15s; }
 .cd-item-excerpt { margin: 0 0 0.5rem; font-size: 0.9rem; line-height: 1.65; color: color-mix(in srgb, var(--fg) 80%, var(--muted));
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .cd-item-excerpt.open { display: block; -webkit-line-clamp: unset; }
@@ -598,10 +660,20 @@ a.cl-row-link:hover .cl-row-title { color: var(--accent); }
 .cd-item-actions { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.8rem; }
 .cd-item-actions .link-btn { display: inline-flex; align-items: center; gap: 0.25rem; }
 .cd-preview-book { margin: 0; font-weight: 700; }
+.cd-preview .side-panel-head { flex-direction: column; gap: 0.55rem; }
+.cd-preview .side-panel-actions { flex-wrap: wrap; width: 100%; gap: 0.9rem; }
+.cd-preview .side-panel-actions .icon-btn { margin-left: auto; }
+.cd-finding { border-bottom: none; padding-top: 0.2rem; animation: cdIn .22s ease; }
+@keyframes cdIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* finding styles shared with the book page */
+.cd-finding .heading-importance-display { display: flex; align-items: center; gap: 1px; margin-bottom: 0.2rem; }
+.cd-finding .heading-star { color: #d4a017; }
+.cd-finding[data-hscale="h1-as-h2"] .rt-content h1 { font-size: 1.35rem; }
+.cd-finding[data-hscale="reduced"] .rt-content h1 { font-size: 1.5rem; }
+.cd-finding[data-hscale="reduced"] .rt-content h2 { font-size: 1.2rem; }
 
 @media (max-width: 560px) {
   .cd-title { font-size: 1.3rem; }
   .cl-admin { padding-left: 0.4rem; }
-  .cd-newtab { display: none !important; }
 }
 `;

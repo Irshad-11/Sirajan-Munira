@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { HandHeart, ShieldCheck } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
-// Purpose + curator disclaimer (Bangla).
+// Purpose + compiler (সংকলক) disclaimer (Bangla).
 // One shared component so the wording is identical on the Landing page and
 // the About page — edit the text here and both places update.
 // ---------------------------------------------------------------------------
@@ -37,11 +37,12 @@ export function CuratorNote({ compact }: { compact?: boolean }) {
         <div className="cn-disclaimer__icon" aria-hidden="true"><ShieldCheck size={18} /></div>
         <div>
           <p className="cn-kicker cn-kicker--muted">ডিসক্লেইমার</p>
-          <p className="cn-disclaimer__lead">আমি শুধু একজন কিউরেটর।</p>
+          <p className="cn-disclaimer__lead">আমি শুধু একজন সংকলক।</p>
           <p>
-            এই সাইটের প্রতিটি finding কোনো না কোনো প্রকাশিত বই থেকে নেওয়া। প্রতিটি finding-এ যা
-            বলা হয়েছে, তার সব দায়িত্ব <strong>সেই বই এবং বইয়ের লেখকের</strong>। আমার কাজ শুধু এই
-            অংশগুলো খুঁজে বের করা, বাংলায় অনুবাদ করা, আর পড়া ও খোঁজার সুবিধার জন্য সাজিয়ে রাখা।
+            সুন্নি সোর্সের বইগুলো আমি নিজে পড়ি, তারপর সেখানে যা পাই তা এই সাইটে finding আকারে
+            লিখে রাখি। তাই এখানকার প্রতিটি finding-এ যা বলা হয়েছে, তার সব দায়ভার <strong>সেই বই
+            এবং বইয়ের লেখকের</strong>। আমার কাজ শুধু এই অংশগুলো খুঁজে বের করা, বাংলায় অনুবাদ করা,
+            আর পড়া ও খোঁজার সুবিধার জন্য সাজিয়ে রাখা।
           </p>
           <p className="cn-disclaimer__foot">
             অনুবাদে বা রেফারেন্সে কোনো ভুল চোখে পড়লে <Link to="/contact">জানাবেন</Link>।
