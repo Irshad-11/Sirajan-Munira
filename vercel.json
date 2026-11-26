@@ -1,8 +1,16 @@
 {
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/llms.txt", "destination": "/api/ai?route=llms" },
+    { "source": "/ai-integration/SKILL.md", "destination": "/api/ai?route=skill" },
+    { "source": "/ai-integration/SEARCH.md", "destination": "/api/ai?route=search-doc" },
+    { "source": "/ai-integration/CITATION.md", "destination": "/api/ai?route=citation-doc" },
+    { "source": "/ai-integration/search", "destination": "/api/ai?route=search" },
+    { "source": "/ai-integration/verify", "destination": "/api/ai?route=verify" },
+    { "source": "/book/:slug/download", "destination": "/api/ai?route=book&slug=:slug&download=1" },
+    { "source": "/book/:slug.txt", "destination": "/api/ai?route=book&slug=:slug&format=txt" },
+    { "source": "/book/:slug.json", "destination": "/api/ai?route=book&slug=:slug&format=json" },
+    { "source": "/collections/:id.txt", "destination": "/api/ai?route=collection&id=:id&format=txt" },
+    { "source": "/collections/:id.json", "destination": "/api/ai?route=collection&id=:id&format=json" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

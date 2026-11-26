@@ -216,7 +216,7 @@ export function useBookExport(book: Book, preloaded?: Heading[] | null) {
 // Toolbar (book page) — every option visible
 // ---------------------------------------------------------------------------
 
-export function BookExportBar({ book, className }: { book: Book; className?: string }) {
+export function BookExportBar({ book, className, extra }: { book: Book; className?: string; extra?: React.ReactNode }) {
   const { run, busy, notice } = useBookExport(book);
   const item = (action: ExportAction, icon: React.ReactNode, label: string) => (
     <button type="button" className="bx-btn" onClick={() => run(action)} disabled={!!busy} aria-busy={busy === action}>
@@ -230,6 +230,7 @@ export function BookExportBar({ book, className }: { book: Book; className?: str
       {item('download', <Download size={14} />, 'Download .md')}
       {item('copy', <Copy size={14} />, 'Copy Markdown')}
       {item('link', <Link2 size={14} />, 'Copy link')}
+      {extra}
       <span className="bx-notice" role="status" aria-live="polite">
         {notice && <><Check size={13} /> {notice}</>}
       </span>

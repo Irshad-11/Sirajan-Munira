@@ -18,6 +18,7 @@ import {
 } from '../lib/richtext';
 import { RichEditor } from '../components/Editor';
 import { BookExportBar } from '../lib/bookExport';
+import { AnalyzeWithAI } from '../components/AiBits';
 import {
   clearHighlight, findPassageRange, findTermRanges, highlightApiSupported, paintHighlight, splitTerms,
 } from '../lib/highlight';
@@ -1126,7 +1127,7 @@ function BookPageInner() {
             {book.base_language && <div><dt>Language</dt><dd>{book.base_language}</dd></div>}
             <div><dt>Findings</dt><dd>{indexState === 'ready' ? index.length : '…'}</dd></div>
           </dl>
-          <BookExportBar book={book} />
+          <BookExportBar book={book} extra={<AnalyzeWithAI slug={book.slug} title={book.title} />} />
           <SourceLinks links={book.source_links || []} />
         </div>
       </header>

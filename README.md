@@ -72,3 +72,20 @@ mirror), plus a matching **Import JSON** control.
   suite, in keeping with the SRS's "basic canvas draw/highlight" scope.
 - The landing page's 3D book is procedural (Three.js primitives via
   react-three-fiber) rather than a sourced 3D asset — see SRS §7.
+
+## AI integration (new)
+
+Deploy on Vercel as usual. `vercel.json` rewrites the AI URLs to one serverless function (`api/ai.js`), which reads Supabase with the public anon key (RLS applies; hidden books are never exported). Make sure the Vercel env vars `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set (the function also accepts `SUPABASE_URL` / `SUPABASE_ANON_KEY`).
+
+| URL | What |
+|---|---|
+| `/llms.txt` | Index of books + collections for AI agents |
+| `/ai-integration` | Human guide, prompt generator |
+| `/ai-integration/SKILL.md`, `SEARCH.md`, `CITATION.md` | Raw instructions for agents |
+| `/book/<slug>.txt` / `.json` / `/download?format=txt\|json` | Complete findings (TXT is split with a `CONTINUE WITH` link if > ~3.8 MB) |
+| `/collections/<id>.txt` / `.json` | Topic collection export |
+| `/ai-integration/search?q=…&mode=auto\|exact\|keyword\|semantic&book=<slug>` | Server-side search over all books |
+| `/ai-integration/verify?text=…` | Exact / partial / no-match quotation check |
+| `/ai-integration/test` | Endpoint self-test |
+
+`npm run dev` serves the same endpoints locally. No database changes are required. Semantic mode reuses the existing `semantic-search` edge function.

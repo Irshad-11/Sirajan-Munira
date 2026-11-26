@@ -9,6 +9,8 @@ import {
 import { useAdmin, useTrackView } from '../lib/context';
 import { Highlighted, splitTerms } from '../lib/highlight';
 import { SearchBox, SEARCH_EXAMPLES } from '../components/SearchBox';
+import { HighAccuracySearch } from '../components/AiBits';
+import { listBooks } from '../lib/supabase';
 import { cacheClearAll, cacheGet, cacheSet, queryKey } from '../lib/searchCache';
 
 // ---------------------------------------------------------------------------
@@ -253,6 +255,8 @@ export default function SearchPage() {
   const tab: Tab = params.get('tab') === 'semantic' ? 'semantic' : 'keyword';
   const terms = useMemo(() => splitTerms(q), [q]);
   useTrackView('site', 'search');
+  const [aiBooks, setAiBooks] = useState<{ slug: string; title: string }[]>([]);
+  useEffect(() => { listBooks({ includeHidden: false }).then((b) => setAiBooks(b.map((x) => ({ slug: x.slug, title: x.title })))).catch(() => {}); }, []);
 
   const location = useLocation();
   const posKey = `sm_search_pos:${location.search}`;
@@ -431,8 +435,19 @@ export default function SearchPage() {
         <SearchBox initialValue={q} onSubmit={submit} busy={busy} autoFocus={!q} />
       </header>
 
+      {q && (
+        <div className="ai-hs-row" key={q}>
+          <HighAccuracySearch query={q} books={aiBooks} />
+          <span className="ai-hs-hint">Not finding it? Let an AI read every book for you.</span>
+        </div>
+      )}
+
       {!q ? (
         <section className="sp-intro">
+          <div className="ai-feature">
+            <p className="ai-feature-k">New feature · AI-powered research</p>
+            <HighAccuracySearch query="" books={aiBooks} variant="card" />
+          </div>
           <div className="sp-modes">
             <div>
               <h2><Sparkles size={15} /> Semantic search</h2>

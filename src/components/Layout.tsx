@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, LogIn, LogOut, Search as SearchIcon, X, Menu, Bookmark, Pin, ChevronUp, ChevronDown } from 'lucide-react';
+import { Settings as SettingsIcon, LogIn, LogOut, Search as SearchIcon, X, Menu, Bookmark, Pin, ChevronUp, ChevronDown, FileText, Wand2, Quote, FlaskConical, Search as SearchDocIcon } from 'lucide-react';
+import { AiLogoCycle } from './AiBits';
 import { useAdmin, usePrefs, THEMES } from '../lib/context';
 import { getUnreadMessageCount, getSiteSetting, setSiteSetting } from '../lib/supabase';
 
@@ -113,6 +114,53 @@ function writeFlag(key: string, on: boolean) {
   try { on ? localStorage.setItem(key, '1') : localStorage.removeItem(key); } catch { /* storage blocked — state just won't persist */ }
 }
 
+
+// ---------------------------------------------------------------------------
+// "More" menu — hover (mouse) or click/tap. On phones it expands inline inside
+// the hamburger menu.
+// ---------------------------------------------------------------------------
+function NavMore({ closeMenu, isAdmin }: { closeMenu: () => void; isAdmin: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const hoverCapable = () => { try { return window.matchMedia('(hover: hover) and (pointer: fine)').matches && window.innerWidth > 720; } catch { return false; } };
+
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: MouseEvent | TouchEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', down); document.addEventListener('touchstart', down); document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('mousedown', down); document.removeEventListener('touchstart', down); document.removeEventListener('keydown', key); };
+  }, [open]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const enter = () => { if (!hoverCapable()) return; clearTimeout(timer.current); setOpen(true); };
+  const leave = () => { if (!hoverCapable()) return; timer.current = setTimeout(() => setOpen(false), 160); };
+  const pick = () => { setOpen(false); closeMenu(); };
+  const raw = (href: string, icon: React.ReactNode, label: string, sub: string) => (
+    <a role="menuitem" href={href} target="_blank" rel="noopener noreferrer" onClick={pick}>{icon}<span><b>{label}</b><small>{sub}</small></span></a>
+  );
+
+  return (
+    <div className={`nav-more ${open ? 'open' : ''}`} ref={ref} onMouseEnter={enter} onMouseLeave={leave}>
+      <button type="button" className="nav-more-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span>More</span> <ChevronDown size={13} className="nav-more-chev" />
+      </button>
+      {open && (
+        <div className="nav-more-panel" role="menu">
+          <p className="nav-more-h">AI &amp; research</p>
+          <Link role="menuitem" to="/ai-integration" onClick={pick}><AiLogoCycle size={16} /><span><b>AI Integration</b><small>Use ChatGPT, Claude, Gemini with the books</small></span></Link>
+          {raw('/llms.txt', <FileText size={16} />, 'llms.txt', 'Index of all books for AI agents')}
+          {raw('/ai-integration/SKILL.md', <Wand2 size={16} />, 'SKILL.md', 'Rules & skill file for AI agents')}
+          {raw('/ai-integration/SEARCH.md', <SearchDocIcon size={16} />, 'Search docs', 'Exact, keyword & semantic search API')}
+          {raw('/ai-integration/CITATION.md', <Quote size={16} />, 'Citation guide', 'Cite findings and original books')}
+          {isAdmin && <Link role="menuitem" to="/ai-integration/test" onClick={pick}><FlaskConical size={16} /><span><b>Endpoint tester</b><small>Admin · validate exports</small></span></Link>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // NavBar
 // ---------------------------------------------------------------------------
@@ -219,6 +267,7 @@ export function NavBar() {
         {isAdmin && <NavLink to="/analytics" onClick={() => setMenuOpen(false)}>Analytics</NavLink>}
         <NavLink to="/about" onClick={() => setMenuOpen(false)}>About</NavLink>
         <NavLink to="/contact" onClick={() => setMenuOpen(false)}>{isAdmin ? 'Inbox' : 'Contact'}</NavLink>
+        <NavMore closeMenu={() => setMenuOpen(false)} isAdmin={isAdmin} />
       </nav>
 
       <form className="nav-search icon-row" role="search" onSubmit={submitSearch}>
@@ -357,6 +406,7 @@ export function SiteFooter() {
           <Link to="/books">Bookshelf</Link>
           <Link to="/collections">Collections</Link>
           <Link to="/search">Search</Link>
+          <Link to="/ai-integration">AI Integration</Link>
           <Link to="/bookmarks">Bookmarks</Link>
           <Link to="/about">About</Link>
           <Link to="/contact">Contact</Link>

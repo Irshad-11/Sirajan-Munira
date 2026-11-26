@@ -1,3 +1,4 @@
+import { AnalyzeWithAI } from '../components/AiBits';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -462,6 +463,7 @@ export function CategoryDetail() {
               </div>
             )}
             <p className="cl-stats cd-stats"><StatChips s={stats ?? undefined} updated={category.updated_at} /></p>
+            <div className="cd-ai"><AnalyzeWithAI kind="collection" id={category.id} title={category.name} /></div>
             <p className="muted cd-howto">Click any finding to read it here in the side panel, or open it in its book.</p>
           </>
         )}

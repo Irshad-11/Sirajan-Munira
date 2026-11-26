@@ -11,6 +11,8 @@ import SearchPage from './pages/Search';
 import Analytics from './pages/Analytics';
 import { AboutPage, ContactPage } from './pages/StaticPages';
 import BookmarksPage from './pages/Bookmarks';
+import AiIntegrationPage from './pages/AiIntegration';
+import AiTestPage from './pages/AiTest';
 import { Splash } from './components/Splash';
 
 export default function App() {
@@ -32,6 +34,8 @@ export default function App() {
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/bookmarks" element={<BookmarksPage />} />
+              <Route path="/ai-integration" element={<AiIntegrationPage />} />
+              <Route path="/ai-integration/test" element={<AiTestPage />} />
               <Route path="*" element={<Landing />} />
             </Routes>
           </Layout>
