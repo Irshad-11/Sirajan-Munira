@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Link2, Bookmark, Copy, Pencil, FolderPlus, Trash2, Check, ChevronDown, ChevronRight,
-  ChevronLeft, Quote, Plus, ListTree, MoreVertical, ArrowUp, ArrowDown, Star, Type, X, Loader2, Search as SearchIcon, ArrowLeft } from 'lucide-react';
+  ChevronLeft, Plus, ListTree, MoreVertical, ArrowUp, ArrowDown, Star, Type, X, Loader2, Search as SearchIcon, ArrowLeft } from 'lucide-react';
 import {
   Book, Category, Heading, HeadingIndexRow, addHeadingToCategory, createHeading, deleteHeading,
   findHeadingIdsInBook, getBookBySlug, getChunkText, getHeadingsByIds, listCategories,
@@ -292,7 +292,7 @@ function HeadingBlock({
   const { isAdmin } = useAdmin();
   const { toggleBookmark, isBookmarked, copySettings } = usePrefs();
   const [readMore, setReadMore] = useState(false);
-  const [copied, setCopied] = useState<'link' | 'content' | 'cite' | null>(null);
+  const [copied, setCopied] = useState<'link' | 'content' | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const bookmarked = isBookmarked(heading.id);
 
@@ -302,7 +302,7 @@ function HeadingBlock({
   const permalink = `${SITE_URL}/book/${book.slug}#${heading.id}`;
   const externalSource = book.source_links?.[0]?.url;
 
-  const flash = (k: 'link' | 'content' | 'cite') => { setCopied(k); setTimeout(() => setCopied(null), 1800); };
+  const flash = (k: 'link' | 'content') => { setCopied(k); setTimeout(() => setCopied(null), 1800); };
 
   const copyUrl = async () => {
     if (!(await copyToClipboard(permalink))) window.prompt('Copy this link:', permalink);
@@ -321,12 +321,6 @@ function HeadingBlock({
     if (!(await copyToClipboard(text))) window.prompt('Copy this text:', text);
     flash('content');
     trackEvent('interact', 'heading', heading.id);
-  };
-
-  const copyCitation = async () => {
-    const text = [`${heading.title_text || firstLineOf(heading.content, 80)}`, `${book.title}${book.author ? ' — ' + book.author : ''}`, `PDF page: ${heading.page_number ?? 'not recorded'}`, permalink].join('\n');
-    if (!(await copyToClipboard(text))) window.prompt('Copy this citation:', text);
-    flash('cite');
   };
 
   const remove = async () => {
@@ -365,9 +359,6 @@ function HeadingBlock({
         </button>
         <button onClick={copyContent} aria-label="Copy content with citation">
           {copied === 'content' ? <Check size={15} /> : <Copy size={15} />} {copied === 'content' ? 'Copied!' : 'Copy'}
-        </button>
-        <button onClick={copyCitation} aria-label="Copy citation">
-          {copied === 'cite' ? <Check size={15} /> : <Quote size={15} />} {copied === 'cite' ? 'Copied!' : 'Cite'}
         </button>
         <span className="hb-add-wrap">
           <button onClick={() => setAddOpen((v) => !v)} aria-expanded={addOpen} aria-label="Add to collection"><FolderPlus size={15} /> Add</button>

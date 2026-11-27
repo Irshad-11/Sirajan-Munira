@@ -1,13 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Search, X, Loader2, Link2, FolderPlus } from 'lucide-react';
-import { HeadingIndexRow, addHeadingToCategory, createCategory, findHeadingIdsInBook, listCategories, Category } from '../lib/supabase';
+import { HeadingIndexRow, findHeadingIdsInBook } from '../lib/supabase';
 import { addToLocal, getTemp, listLocal, makeCollection, saveCollection, setTemp, TEMP_ID, parsePermalink } from '../lib/collections';
 import '../styles/coll.css';
 
-/** Per-finding "Add to collection" popover: temporary / local / (admin) global. */
+/** Per-finding "Add to collection" popover: temporary / local. */
 export function AddToCollectionMenu({ headingId, isAdmin, onClose }: { headingId: string; isAdmin: boolean; onClose: () => void }) {
   const [msg, setMsg] = useState('');
-  const [cats, setCats] = useState<Category[] | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
@@ -15,7 +14,6 @@ export function AddToCollectionMenu({ headingId, isAdmin, onClose }: { headingId
     document.addEventListener('mousedown', h); document.addEventListener('keydown', k);
     return () => { document.removeEventListener('mousedown', h); document.removeEventListener('keydown', k); };
   }, [onClose]);
-  useEffect(() => { if (isAdmin) listCategories({ includeHidden: true }).then(setCats).catch(() => setCats([])); }, [isAdmin]);
   const now = () => new Date().toISOString();
   const toTemp = () => {
     const t = getTemp() || { ...makeCollection({ name: 'Temporary collection' }, []), id: TEMP_ID };
@@ -27,19 +25,12 @@ export function AddToCollectionMenu({ headingId, isAdmin, onClose }: { headingId
     const name = prompt('Collection name · নাম'); if (!name) return;
     const c = makeCollection({ name }, [{ id: headingId, addedAt: now() }]); setMsg(saveCollection(c, 'local') ? 'Created · তৈরি হয়েছে' : 'Storage full — export instead');
   };
-  const toGlobal = async (id: string) => { try { await addHeadingToCategory(id, headingId); setMsg('Added to site collection'); } catch (e) { setMsg('Failed: ' + (e as Error).message); } };
-  const newGlobal = async () => { const n = prompt('New site collection name'); if (!n) return; try { const c = await createCategory({ name: n }); await addHeadingToCategory(c.id, headingId); setMsg('Created & added'); } catch (e) { setMsg('Failed: ' + (e as Error).message); } };
   return (
     <div className="hb-add-menu" ref={ref}>
       <b>Add to · কোথায় যোগ করবেন</b>
       <button onClick={toTemp}>Temporary (this tab)</button>
       {listLocal().map((c) => <button key={c.id} onClick={() => toLocal(c.id)}>Local: {c.name}</button>)}
       <button onClick={newLocal}>+ New local collection</button>
-      {isAdmin && (<>
-        <hr />
-        {(cats || []).slice(0, 30).map((c) => <button key={c.id} onClick={() => toGlobal(c.id)}>Global: {c.name}</button>)}
-        <button onClick={newGlobal}>+ New global collection</button>
-      </>)}
       {msg && <p className="hb-msg" role="status">{msg}</p>}
     </div>
   );

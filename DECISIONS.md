@@ -22,3 +22,11 @@ Format: **Chosen** / Rejected / Why. (Options were compared by an independent re
 - **Server-side storage of user collections / accounts** — Local + export/import covers it without a login system or personal-data storage.
 - **Automatic rewriting/repair of data-quality problems** — the admin report (`/ai-integration/quality`) lists them; fixing content is an editorial decision.
 - **Prebuilt static files + build script** — see decision 1.
+
+## Round: use the site's own collection design
+- Local/temporary collections now render through the existing `CategoryDetail` (same header, chips, list, side panel); the separate co-* collection view was removed. `/my-collections/:id` routes to it; `/my-collections` redirects to `/collections`.
+- `/collections` gets an "On this device" section (same row design) and an "Import JSON" link; `/collections/import` stays a separate page.
+- Added to the existing page for local collections only: notes, remove, search, book filter, copy links, export JSON, copy as AI context, save temp → device, delete. Group-by-book and sort were dropped.
+- More menu: AI Integration + llms.txt (+ admin tester). Footer back to original links. No nav entries for guide / AI system (the landing page has them).
+- Removed the per-heading Cite button; the Add menu is temp/local only (admins already have the existing "Collection" button for site collections).
+- Removed left accent borders (help panel, notes, question box, test rows, selected item).

@@ -566,7 +566,7 @@ const AI_STEPS: GuideStep[] = [
       <>
         <p>AI-কে JSON-এ উত্তর দিতে বলুন, তারপর <Link to="/collections/import">Import collection</Link> পাতায় পেস্ট করুন। সাইট প্রতিটি item ডাটাবেসের সঙ্গে মিলিয়ে <strong>Verified</strong> বা <strong>Check</strong> দেখায়। না মিললে "AI বলেছে" আর "সাইটে আছে" পাশাপাশি দেখা যায়। কোনো item বাতিল হলে পাতাতেই কারণ আর সমাধান লেখা থাকে।</p>
         <CopyChip label="কালেকশন JSON প্রম্পট" text={P_JSON()} />
-        <p>সেভ করা যায় দুই জায়গায়: <strong>Temporary</strong> (শুধু এই ট্যাবে) অথবা <strong>Local</strong> (এই ডিভাইসে, Export করে ব্যাকআপও রাখা যায়)। সেভ করা কালেকশন <Link to="/my-collections">My collections</Link>-এ পাবেন।</p>
+        <p>সেভ করা যায় দুই জায়গায়: <strong>Temporary</strong> (শুধু এই ট্যাবে) অথবা <strong>Local</strong> (এই ডিভাইসে, Export করে ব্যাকআপও রাখা যায়)। সেভ করা কালেকশন <Link to="/collections">Collections</Link> পেজের “On this device” অংশে পাবেন।</p>
       </>
     ),
     cta: { to: '/collections/import', label: 'Import collection', primary: true },
@@ -592,7 +592,7 @@ const AI_STEPS: GuideStep[] = [
         <p className="hgai-note">সাধারণ ধারাটা এরকম: প্রশ্ন করুন, JSON নিন, এখানে পেস্ট করে Verified দেখুন, ভুলগুলো বাদ দিন, সেভ করুন। এরপর "Copy as AI context" দিয়ে পরের প্রশ্ন করুন।</p>
       </>
     ),
-    cta: { to: '/my-collections', label: 'My collections' },
+    cta: { to: '/collections', label: 'Collections' },
     Visual: S4,
   },
   {

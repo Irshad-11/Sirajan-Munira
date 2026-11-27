@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ClipboardPaste, Check, AlertTriangle, Info, StickyNote, XCircle, Copy, Download, Upload, Trash2, FolderOpen, ExternalLink, Sparkles, ArrowLeft } from 'lucide-react';
+import { ClipboardPaste, Check, AlertTriangle, Info, StickyNote, XCircle, Copy, Download, Upload, Trash2, FolderOpen, ExternalLink, ArrowLeft } from 'lucide-react';
 import { useAdmin } from '../lib/context';
 import { copyToClipboard } from '../lib/richtext';
 import { addHeadingToCategory, createCategory, listCategories, listCategoryHeadings, Category } from '../lib/supabase';
@@ -281,130 +281,6 @@ export function CollectionImport() {
           <button className="co-btn co-primary co-wide" onClick={save} disabled={busy || !sel.length}>Save {sel.length} item{sel.length === 1 ? '' : 's'} · সেভ করুন</button>
         </section>
       )}
-      {toast && <div className="co-toast" role="status">{toast}</div>}
-    </div>
-  );
-}
-
-// ===========================================================================
-// My collections list
-// ===========================================================================
-export function MyCollectionsList() {
-  const [, force] = useState(0);
-  const [toast, setToast] = useToast();
-  const all = listLocal(); const temp = getTemp();
-  const fileRef = React.useRef<HTMLInputElement>(null);
-  return (
-    <div className="co-wrap">
-      <h1 className="co-h1">My collections · আমার কালেকশন</h1>
-      <p className="co-sub">এগুলো শুধু এই ব্রাউজারে আছে (ID + নোট + তারিখ)। ব্রাউজার ডাটা মুছলে হারাবে — তাই Export করে রাখুন।</p>
-      <div className="co-row">
-        <Link className="co-btn co-primary" to="/collections/import"><ClipboardPaste size={15} aria-hidden /> Import JSON</Link>
-        <button className="co-btn" onClick={() => download('sirajan-local-collections.json', exportLocalStore())}><Download size={15} aria-hidden /> Export all</button>
-        <button className="co-btn" onClick={() => fileRef.current?.click()}><Upload size={15} aria-hidden /> Import backup</button>
-        <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={async (e) => {
-          const f = e.target.files?.[0]; if (!f) return; const r = importLocalStore(await f.text());
-          setToast(r.error ? 'Error: ' + r.error : `${r.added} collection(s) imported`); force((x) => x + 1); e.target.value = '';
-        }} />
-      </div>
-      {temp && <Link className="co-list-item" to="/my-collections/temp"><FolderOpen size={18} aria-hidden /><div><b>{temp.name}</b> <em className="co-tag">Temporary</em><span>{temp.items.length} findings · এই ট্যাব বন্ধ হলে মুছবে</span></div></Link>}
-      {all.map((c) => (
-        <div key={c.id} className="co-list-item">
-          <Link to={'/my-collections/' + c.id} className="co-li-main"><FolderOpen size={18} aria-hidden /><div><b>{c.name}</b><span>{c.items.length} findings · {new Date(c.updatedAt).toLocaleDateString('en-GB')}</span></div></Link>
-          <button className="co-icon" aria-label={`Delete ${c.name}`} onClick={() => { if (confirm(`Delete "${c.name}"?`)) { deleteLocal(c.id); force((x) => x + 1); } }}><Trash2 size={16} /></button>
-        </div>
-      ))}
-      {!temp && !all.length && <p className="co-empty">এখনো কোনো কালেকশন নেই। <Link to="/collections/import">JSON ইম্পোর্ট করুন</Link> বা বইয়ের পাতা থেকে finding যোগ করুন।</p>}
-      {toast && <div className="co-toast" role="status">{toast}</div>}
-    </div>
-  );
-}
-
-// ===========================================================================
-// Collection view
-// ===========================================================================
-export function MyCollectionView() {
-  const { id = '' } = useParams();
-  const nav = useNavigate();
-  const [c, setC] = useState<StoredCollection | null>(() => getStored(id));
-  const [live, setLive] = useState<Map<string, LiveFinding> | null>(null);
-  const [toast, setToast] = useToast();
-  const [bookF, setBookF] = useState('all');
-  const [group, setGroup] = useState(true);
-  const [sort, setSort] = useState<'order' | 'page'>('order');
-  const [q, setQ] = useState('');
-  const [full, setFull] = useState<Set<string>>(new Set());
-
-  useEffect(() => { if (c) fetchLive(c.items.map((i) => i.id)).then(setLive).catch(() => setLive(new Map())); }, [c?.items.length]); // eslint-disable-line
-  const persist = (n: StoredCollection) => { n = { ...n, updatedAt: new Date().toISOString() }; if (!saveCollection(n, id === TEMP_ID ? 'temp' : 'local')) { setToast('Storage full — export instead'); return; } setC(n); };
-
-  const rowsAll = useMemo(() => (c?.items || []).map((item, i) => ({ item, live: live?.get(item.id) ?? null, i })), [c, live]);
-  const books = useMemo(() => [...new Set(rowsAll.map((r) => r.live?.bookTitle).filter(Boolean) as string[])], [rowsAll]);
-  const missing = rowsAll.filter((r) => live && !r.live);
-
-  const shown = useMemo(() => {
-    const nq = bnFuzzy(q);
-    let r = rowsAll.filter((x) => x.live && (bookF === 'all' || x.live.bookTitle === bookF) &&
-      (!nq || bnFuzzy(x.live.title + ' ' + x.live.plain + ' ' + (x.item.note || '')).includes(nq)));
-    if (sort === 'page') r = [...r].sort((a, b) => (parseFloat(a.live!.page || '') || 1e9) - (parseFloat(b.live!.page || '') || 1e9));
-    return r;
-  }, [rowsAll, bookF, q, sort]);
-
-  if (!c) return <div className="co-wrap"><h1 className="co-h1">Collection not found</h1><p className="co-empty">এই ব্রাউজারে এমন কালেকশন নেই। <Link to="/my-collections">সব দেখুন</Link></p></div>;
-
-  const setNote = (iid: string, note: string) => persist({ ...c, items: c.items.map((i) => (i.id === iid ? { ...i, note: note || undefined } : i)) });
-  const remove = (iid: string) => persist({ ...c, items: c.items.filter((i) => i.id !== iid) });
-  const rowsFor = (rs: typeof shown) => rs.map((r) => ({ item: r.item, live: r.live }));
-  const copy = async (t: string, msg: string) => setToast((await copyToClipboard(t)) ? msg : 'Copy failed');
-
-  const renderItem = (r: (typeof shown)[number]) => {
-    const l = r.live!; const open = full.has(l.id);
-    return (
-      <article key={l.id} className="co-item">
-        <h4><Link to={`/book/${encodeURIComponent(l.bookSlug)}#${l.id}`}>{l.title}</Link></h4>
-        <div className="co-meta"><span className="co-pg">{l.bookTitle}</span><span className="co-pg">PDF p. {l.page ?? 'not recorded'}</span>{r.item.match && <span className="co-pg">{r.item.match}</span>}</div>
-        <p className="co-prev">{open ? l.plain : l.plain.slice(0, 220) + (l.plain.length > 220 ? '…' : '')}</p>
-        {l.plain.length > 220 && <button className="co-link" onClick={() => setFull((s) => { const n = new Set(s); n.has(l.id) ? n.delete(l.id) : n.add(l.id); return n; })}>{open ? 'Show less' : 'Show more · আরও'}</button>}
-        <textarea className="co-note-in" rows={1} defaultValue={r.item.note || ''} placeholder="নোট লিখুন" aria-label="Note" onBlur={(e) => e.target.value !== (r.item.note || '') && setNote(l.id, e.target.value)} />
-        <div className="co-row">
-          <button className="co-btn co-sm" onClick={() => copy(permalinkFor(l.bookSlug, l.id), 'Link copied')}><Copy size={13} aria-hidden /> Link</button>
-          <Link className="co-btn co-sm" to={`/book/${encodeURIComponent(l.bookSlug)}#${l.id}`}><ExternalLink size={13} aria-hidden /> Open</Link>
-          <button className="co-btn co-sm" onClick={() => remove(l.id)}><Trash2 size={13} aria-hidden /> Remove</button>
-        </div>
-      </article>
-    );
-  };
-
-  const byBook = group ? [...shown.reduce((m, r) => { const k = r.live!.bookTitle; (m.get(k) || m.set(k, []).get(k)!).push(r); return m; }, new Map<string, typeof shown>())] : [['', shown] as [string, typeof shown]];
-  const exp = () => exportJson(c, rowsFor(rowsAll));
-
-  return (
-    <div className="co-wrap">
-      <p className="co-crumb"><Link to="/my-collections"><ArrowLeft size={14} aria-hidden /> My collections</Link></p>
-      <h1 className="co-h1">{c.name} {id === TEMP_ID && <em className="co-tag">Temporary</em>}</h1>
-      {c.query && <p className="co-sub">প্রশ্ন: {c.query}</p>}
-      <p className="co-sub">{rowsAll.length} findings · {books.length} books{!live && ' · loading…'}</p>
-
-      <div className="co-row">
-        <button className="co-btn" onClick={() => copy(shown.map((r) => permalinkFor(r.live!.bookSlug, r.live!.id)).join('\n'), 'All links copied')}><Copy size={15} aria-hidden /> Copy all links</button>
-        <button className="co-btn" onClick={() => download((c.name || 'collection').replace(/[^\wঀ-৿-]+/g, '_') + '.json', exp())}><Download size={15} aria-hidden /> Export JSON</button>
-        <button className="co-btn" onClick={() => copy(aiContext(c, rowsFor(shown)), 'AI context copied — paste it into your AI')}><Sparkles size={15} aria-hidden /> Copy as AI context</button>
-        {id === TEMP_ID && <button className="co-btn co-primary" onClick={() => { const n = { ...c, id: makeCollection({ name: c.name }, []).id }; saveCollection(n, 'local'); setToast('Saved to this device'); nav('/my-collections/' + n.id, { replace: true }); }}>Save to this device</button>}
-      </div>
-
-      <div className="co-filters">
-        <input className="co-in" value={q} onChange={(e) => setQ(e.target.value)} placeholder="কালেকশনে খুঁজুন" aria-label="Search in collection" />
-        <select className="co-in" value={bookF} onChange={(e) => setBookF(e.target.value)} aria-label="Filter by book"><option value="all">All books · সব বই</option>{books.map((b) => <option key={b}>{b}</option>)}</select>
-        <select className="co-in" value={sort} onChange={(e) => setSort(e.target.value as any)} aria-label="Sort"><option value="order">Pasted order · ক্রম</option><option value="page">PDF page · পৃষ্ঠা</option></select>
-        <label className="co-chk"><input type="checkbox" checked={group} onChange={(e) => setGroup(e.target.checked)} /> Group by book</label>
-      </div>
-
-      {missing.length > 0 && (
-        <div className="co-err" role="status"><b>{missing.length}টি finding পাওয়া যাচ্ছে না (missing / not available)।</b> <span>(deleted or hidden)</span>
-          <ul>{missing.map((m) => <li key={m.item.id}><code>{m.item.id}</code>{m.item.note ? ` — ${m.item.note}` : ''} <button className="co-link" onClick={() => remove(m.item.id)}>remove</button></li>)}</ul></div>
-      )}
-      {live && !shown.length && <p className="co-empty">কিছু পাওয়া যায়নি।</p>}
-      {byBook.map(([b, rs]) => <div key={b || 'all'}>{b && <h3 className="co-gh">{b} <small>({rs.length})</small></h3>}{rs.map(renderItem)}</div>)}
       {toast && <div className="co-toast" role="status">{toast}</div>}
     </div>
   );

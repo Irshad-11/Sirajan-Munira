@@ -1,5 +1,5 @@
 import React from 'react';
-import { CollectionImport, MyCollectionsList, MyCollectionView } from './pages/MyCollections';
+import { CollectionImport } from './pages/MyCollections';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AdminProvider, PrefsProvider } from './lib/context';
 import { Layout } from './components/Layout';
@@ -30,8 +30,8 @@ export default function App() {
               <Route path="/collections" element={<CollectionsList />} />
               <Route path="/collections/import" element={<CollectionImport />} />
               <Route path="/collections/:id" element={<CategoryDetail />} />
-              <Route path="/my-collections" element={<MyCollectionsList />} />
-              <Route path="/my-collections/:id" element={<MyCollectionView />} />
+              <Route path="/my-collections" element={<Navigate to="/collections" replace />} />
+              <Route path="/my-collections/:id" element={<CategoryDetail />} />
               <Route path="/drafts" element={<Drafts />} />
               <Route path="/search" element={<SearchPage />} />
               <Route path="/analytics" element={<Analytics />} />

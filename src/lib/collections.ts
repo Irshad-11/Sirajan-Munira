@@ -5,7 +5,7 @@
 // stored as truth. Only IDs, notes and dates are stored; titles/pages/text are
 // always re-read from the database.
 // ---------------------------------------------------------------------------
-import { Book, Heading, getHeadingsByIds, listBooks } from './supabase';
+import { Book, CategoryHeadingDetail, Heading, getHeadingsByIds, listBooks } from './supabase';
 import { docToPlainText } from './richtext';
 import { bnFuzzy, bnWords } from './bn';
 
@@ -378,4 +378,23 @@ export function aiContext(c: { name: string; query?: string }, rows: { item: Sto
     out.push('', live.plain, '', '---', '');
   });
   return out.join('\n');
+}
+
+/** Findings of a local/temp collection in the same shape the site's collection page uses. */
+export async function fetchLocalDetails(ids: string[]): Promise<{ rows: CategoryHeadingDetail[]; missing: string[] }> {
+  const books = await getBooks();
+  const bm = new Map(books.map((b) => [b.id, b]));
+  const uniq = [...new Set(ids.filter((i) => UUID.test(i)))];
+  const parts: string[][] = [];
+  for (let i = 0; i < uniq.length; i += 40) parts.push(uniq.slice(i, i + 40));
+  const got = new Map<string, Heading>();
+  (await Promise.all(parts.map((p) => getHeadingsByIds(p)))).flat().forEach((h) => got.set(h.id, h));
+  const rows: CategoryHeadingDetail[] = [];
+  const missing: string[] = [];
+  for (const id of ids) {
+    const h = got.get(id); const b = h && bm.get(h.book_id);
+    if (h && b) rows.push({ heading: h, book: { id: b.id, slug: b.slug, title: b.title, author: b.author, cover_image_url: b.cover_image_url } });
+    else missing.push(id);
+  }
+  return { rows, missing };
 }

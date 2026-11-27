@@ -45,7 +45,7 @@
   background: var(--bg); color: var(--fg); font: inherit; font-size: 0.85rem; resize: vertical;
 }
 .ai-q:focus, .ai-select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 1px; }
-.ai-qshow { margin: 0.2rem 0 0.4rem; padding: 0.5rem 0.65rem; border-left: 3px solid var(--accent); background: var(--bg); border-radius: 0 8px 8px 0; font-weight: 600; word-break: break-word; }
+.ai-qshow { margin: 0.2rem 0 0.4rem; padding: 0.5rem 0.65rem; border: 1px solid var(--border); background: var(--bg); border-radius: 8px; font-weight: 600; word-break: break-word; }
 .ai-qshow span { display: block; font-size: 0.66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
 .ai-copy {
   display: flex; align-items: center; justify-content: center; gap: 0.45rem; width: 100%; margin-top: 0.7rem; padding: 0.6rem 0.9rem;
@@ -184,12 +184,12 @@
 .aii-summary { margin: 1rem 0 0.5rem; font-size: 0.9rem; }
 .aii-summary .ok { color: #2e9e5b; } .aii-summary .wn { color: #b07d0e; } .aii-summary .bd { color: #c0392b; }
 .aii-tests { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
-.aii-test { display: flex; gap: 0.6rem; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; background: var(--surface); font-size: 0.82rem; }
+.aii-test { display: flex; gap: 0.6rem; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 0.82rem; }
 .aii-test p { margin: 0.1rem 0 0; color: var(--muted); overflow-wrap: anywhere; }
 .aii-test-u { display: block; font-size: 0.72rem; color: var(--accent); overflow-wrap: anywhere; }
-.aii-test--pass { border-left-color: #2e9e5b; } .aii-test--pass .aii-test-i { color: #2e9e5b; }
-.aii-test--warn { border-left-color: #d49a1f; } .aii-test--warn .aii-test-i { color: #b07d0e; }
-.aii-test--fail { border-left-color: #c0392b; } .aii-test--fail .aii-test-i { color: #c0392b; }
+.aii-test--pass {} .aii-test--pass .aii-test-i { color: #2e9e5b; }
+.aii-test--warn {} .aii-test--warn .aii-test-i { color: #b07d0e; }
+.aii-test--fail {} .aii-test--fail .aii-test-i { color: #c0392b; }
 .aii-test-i { flex: none; margin-top: 0.1rem; }
 .cd-ai { margin: 0.4rem 0 0.6rem; }
 

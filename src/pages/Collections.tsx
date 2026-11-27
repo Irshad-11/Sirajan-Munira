@@ -1,16 +1,28 @@
 import { AnalyzeWithAI } from '../components/AiBits';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Plus, Pencil, Trash2, ExternalLink, ChevronRight, Star, Eye, EyeOff, Loader2, ArrowLeft,
-  FolderOpen, FileText, BookOpen, CalendarDays, X,
+  FolderOpen, FileText, BookOpen, CalendarDays, X, Copy, Download, ClipboardPaste, Upload,
 } from 'lucide-react';
 import {
   Category, CategoryHeadingDetail, CategoryStats, createCategory, deleteCategory, getCategory,
   getCategoryStatsMany, listCategoriesPage, listCategoryItemsPage, requestIndexing, updateCategory, uploadImage,
 } from '../lib/supabase';
 import { useAdmin, useTrackView } from '../lib/context';
-import { RichTextView, docToPlainText } from '../lib/richtext';
+import { RichTextView, docToPlainText, copyToClipboard } from '../lib/richtext';
+import {
+  StoredCollection, TEMP_ID, aiContext, deleteLocal, exportJson, exportLocalStore, fetchLocalDetails, fetchLive, getStored, getTemp,
+  importLocalStore, listLocal, makeCollection, permalinkFor, saveCollection,
+} from '../lib/collections';
+import { bnFuzzy } from '../lib/bn';
+
+function downloadText(name: string, text: string) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,7 +44,7 @@ function StatChips({ s, updated }: { s?: CategoryStats; updated?: string }) {
     <span className="cl-chips">
       <span className="cl-chip"><FileText size={12} aria-hidden="true" /> {plural(s.entryCount, 'finding')}</span>
       <span className="cl-chip"><BookOpen size={12} aria-hidden="true" /> {plural(s.bookCount, 'book')}</span>
-      <span className="cl-chip"><Eye size={12} aria-hidden="true" /> {plural(s.viewCount, 'visit')}</span>
+      {s.viewCount >= 0 && <span className="cl-chip"><Eye size={12} aria-hidden="true" /> {plural(s.viewCount, 'visit')}</span>}
       {updated && <span className="cl-chip cl-chip--quiet"><CalendarDays size={12} aria-hidden="true" /> Updated {fmtDate(updated)}</span>}
     </span>
   );
@@ -183,6 +195,43 @@ function CollectionRow({ c, stats, isAdmin, h }: { c: Category; stats?: Category
   );
 }
 
+/** Collections saved in this browser (imported JSON, or added from book pages). Same row design as site collections. */
+function OnThisDevice() {
+  const [, force] = useState(0);
+  const [msg, setMsg] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+  const temp = getTemp(); const all = listLocal();
+  if (!temp && !all.length) return null;
+  const row = (c: StoredCollection, tag?: string) => (
+    <li key={c.id} className="cl-row">
+      <Link to={`/my-collections/${c.id}`} className="cl-row-link">
+        <span className="cl-row-count" aria-hidden="true"><strong>{c.items.length}</strong><small>{c.items.length === 1 ? 'finding' : 'findings'}</small></span>
+        <span className="cl-row-main">
+          <span className="cl-row-title">{c.name}{tag && <span className="cl-badge cl-badge--hidden">{tag}</span>}</span>
+          <span className="cl-row-desc">{c.description || c.query || (tag ? 'Cleared when this tab closes.' : 'Saved on this device only.')}</span>
+          <span className="cl-stats"><span className="cl-chips"><span className="cl-chip cl-chip--quiet"><CalendarDays size={12} aria-hidden="true" /> Updated {fmtDate(c.updatedAt)}</span></span></span>
+        </span>
+        <ChevronRight size={16} className="cl-row-chev" aria-hidden="true" />
+      </Link>
+    </li>
+  );
+  return (
+    <section className="cl-section" aria-labelledby="cl-device">
+      <h2 id="cl-device" className="cl-section-title">On this device <span className="muted">{all.length + (temp ? 1 : 0)}</span></h2>
+      <ul className="cl-list">{temp && row(temp, 'Temporary')}{all.map((c) => row(c))}</ul>
+      <div className="list-status">
+        <button className="link-btn icon-row" onClick={() => downloadText('sirajan-local-collections.json', exportLocalStore())}><Download size={13} aria-hidden="true" /> Export all</button>
+        <button className="link-btn icon-row" onClick={() => fileRef.current?.click()}><Upload size={13} aria-hidden="true" /> Import backup</button>
+        {msg && <span role="status">{msg}</span>}
+        <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={async (e) => {
+          const f = e.target.files?.[0]; if (!f) return; const r = importLocalStore(await f.text());
+          setMsg(r.error ? 'Error: ' + r.error : `${r.added} collection(s) imported`); force((x) => x + 1); e.target.value = '';
+        }} />
+      </div>
+    </section>
+  );
+}
+
 function RowSkeleton() {
   return (
     <li className="cl-row" aria-hidden="true">
@@ -291,12 +340,16 @@ export function CollectionsList() {
           </p>
           <p className="muted cl-intro-meta">{state === 'loading' ? 'Loading collections…' : plural(count, 'collection')}</p>
         </div>
-        {isAdmin && <button className="primary icon-row" onClick={() => setEditing('new')}><Plus size={16} /> New collection</button>}
+        <div className="cl-head-actions">
+          <Link to="/collections/import" className="link-btn icon-row"><ClipboardPaste size={14} aria-hidden="true" /> Import JSON</Link>
+          {isAdmin && <button className="primary icon-row" onClick={() => setEditing('new')}><Plus size={16} /> New collection</button>}
+        </div>
       </div>
       {actionError && <p className="form-error" role="alert">{actionError}</p>}
 
       <div className={`split-view ${editing ? 'has-detail' : ''}`}>
         <div className="split-list">
+          <OnThisDevice />
           {(featState === 'loading' || featured.length > 0) && (
             <section className="cl-section" aria-labelledby="cl-featured">
               <h2 id="cl-featured" className="cl-section-title">Featured</h2>
@@ -372,6 +425,13 @@ export function CategoryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { isAdmin } = useAdmin();
+  const isLocal = useLocation().pathname.startsWith('/my-collections');
+  const [stored, setStored] = useState<StoredCollection | null>(null);
+  const [missing, setMissing] = useState<string[]>([]);
+  const [fq, setFq] = useState('');
+  const [fbook, setFbook] = useState('all');
+  const [noteEdit, setNoteEdit] = useState<string | null>(null);
+  const [toast, setToast] = useState('');
   const [category, setCategory] = useState<Category | null>(null);
   const [catState, setCatState] = useState<'loading' | 'ready' | 'notfound' | 'error'>('loading');
   const [stats, setStats] = useState<CategoryStats | null>(null);
@@ -383,10 +443,10 @@ export function CategoryDetail() {
   const [descExpanded, setDescExpanded] = useState(false);
   const reqId = useRef(0);
   const sentinel = useRef<HTMLDivElement>(null);
-  useTrackView('category', id ?? null);
+  useTrackView('category', isLocal ? null : id ?? null);
 
   const loadItems = useCallback(async (offset: number) => {
-    if (!id) return;
+    if (!id || isLocal) return;
     const rid = ++reqId.current;
     setState(offset ? 'more' : 'loading');
     try {
@@ -395,11 +455,28 @@ export function CategoryDetail() {
       setItems((p) => (offset ? [...p, ...page.rows] : page.rows));
       setTotal(page.total); setState('idle');
     } catch { if (rid === reqId.current) setState('error'); }
-  }, [id]);
+  }, [id, isLocal]);
+
+  const applyLocal = useCallback(async (c: StoredCollection) => {
+    setStored(c);
+    setCategory({ id: c.id, name: c.name, description: [c.description, c.query && `প্রশ্ন: ${c.query}`].filter(Boolean).join(' · '), updated_at: c.updatedAt, visibility: true } as unknown as Category);
+    setCatState('ready'); setState('loading');
+    try {
+      const { rows, missing: miss } = await fetchLocalDetails(c.items.map((i) => i.id));
+      setItems(rows); setTotal(rows.length); setMissing(miss);
+      setStats({ entryCount: rows.length, bookCount: new Set(rows.map((r) => r.book.id)).size, viewCount: -1 });
+      setState('idle');
+    } catch { setState('error'); }
+  }, []);
 
   const load = useCallback(async () => {
     if (!id) return;
     setSelected(null); setItems([]); setCatState('loading');
+    if (isLocal) {
+      const c = getStored(id);
+      if (!c) { setCatState('notfound'); return; }
+      applyLocal(c); return;
+    }
     loadItems(0);
     try {
       const c = await getCategory(id);
@@ -407,7 +484,7 @@ export function CategoryDetail() {
       setCategory(c); setCatState('ready');
       getCategoryStatsMany([id]).then((s) => setStats(s[id] || null)).catch(() => {});
     } catch { setCatState('error'); }
-  }, [id, loadItems, isAdmin]);
+  }, [id, loadItems, isAdmin, isLocal, applyLocal]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -429,8 +506,33 @@ export function CategoryDetail() {
     return () => obs.disconnect();
   }, [state, items.length, total, loadItems]);
 
+  const persist = (n: StoredCollection) => {
+    n = { ...n, updatedAt: new Date().toISOString() };
+    if (!saveCollection(n, id === TEMP_ID ? 'temp' : 'local')) { setToast('Storage full — export instead'); return; }
+    setStored(n);
+  };
+  const noteOf = (hid: string) => stored?.items.find((i) => i.id === hid)?.note || '';
+  const setNote = (hid: string, note: string) => stored && persist({ ...stored, items: stored.items.map((i) => (i.id === hid ? { ...i, note: note || undefined } : i)) });
+  const removeItem = (hid: string) => {
+    if (!stored) return;
+    persist({ ...stored, items: stored.items.filter((i) => i.id !== hid) });
+    const rest = items.filter((r) => r.heading.id !== hid);
+    setItems(rest); setTotal(rest.length); setStats({ entryCount: rest.length, bookCount: new Set(rest.map((r) => r.book.id)).size, viewCount: -1 }); setMissing((p) => p.filter((m) => m !== hid)); setSelected(null);
+  };
+  const bookTitles = [...new Set(items.map((r) => r.book.title))];
+  const shownItems = !isLocal ? items : items.filter((r) => {
+    if (fbook !== 'all' && r.book.title !== fbook) return false;
+    const nq = bnFuzzy(fq);
+    return !nq || bnFuzzy(`${docToPlainText(r.heading.content)} ${noteOf(r.heading.id)}`).includes(nq);
+  });
+  const say = async (t: string, ok: string) => setToast((await copyToClipboard(t)) ? ok : 'Copy failed');
+  const liveRows = async () => {
+    const live = await fetchLive(items.map((r) => r.heading.id));
+    return (stored?.items || []).map((item) => ({ item, live: live.get(item.id) ?? null }));
+  };
+
   if (catState === 'notfound') {
-    return <div className="page"><div className="state-block"><h3>Collection not found</h3><p>It may have been removed or hidden.</p>
+    return <div className="page"><div className="state-block"><h3>Collection not found</h3><p>{isLocal ? 'No such collection on this device.' : 'It may have been removed or hidden.'}</p>
       <div className="state-actions"><button className="primary" onClick={() => navigate('/collections')}>All collections</button></div></div></div>;
   }
   if (catState === 'error') {
@@ -454,7 +556,7 @@ export function CategoryDetail() {
           </>
         ) : category && (
           <>
-            <p className="cd-kicker"><FolderOpen size={13} aria-hidden="true" /> Collection</p>
+            <p className="cd-kicker"><FolderOpen size={13} aria-hidden="true" /> {isLocal ? (id === TEMP_ID ? 'Temporary collection · this tab' : 'Collection · this device') : 'Collection'}</p>
             <h1 className="cd-title">{category.name}</h1>
             {desc && (
               <div className="cd-desc">
@@ -463,7 +565,30 @@ export function CategoryDetail() {
               </div>
             )}
             <p className="cl-stats cd-stats"><StatChips s={stats ?? undefined} updated={category.updated_at} /></p>
-            <div className="cd-ai"><AnalyzeWithAI kind="collection" id={category.id} title={category.name} /></div>
+            {isLocal ? (
+              <div className="cd-tools">
+                <button className="link-btn icon-row" onClick={async () => say((await liveRows()).filter((r) => r.live).map((r) => permalinkFor(r.live!.bookSlug, r.live!.id)).join('\n'), 'Links copied')}><Copy size={13} aria-hidden="true" /> Copy links</button>
+                <button className="link-btn icon-row" onClick={async () => stored && downloadText((stored.name || 'collection').replace(/[^\wঀ-৿-]+/g, '_') + '.json', exportJson(stored, await liveRows()))}><Download size={13} aria-hidden="true" /> Export JSON</button>
+                <button className="link-btn icon-row" onClick={async () => stored && say(aiContext(stored, await liveRows()), 'Copied — paste it into your AI')}>Copy as AI context</button>
+                {id === TEMP_ID && <button className="link-btn icon-row" onClick={() => { if (!stored) return; const n = { ...stored, id: makeCollection({ name: stored.name }, []).id }; saveCollection(n, 'local'); navigate('/my-collections/' + n.id, { replace: true }); }}>Save to this device</button>}
+                {id !== TEMP_ID && <button className="link-btn icon-row" onClick={() => { if (confirm(`Delete "${stored?.name}" from this device?`)) { deleteLocal(id!); navigate('/collections'); } }}><Trash2 size={13} aria-hidden="true" /> Delete</button>}
+              </div>
+            ) : (
+              <div className="cd-ai"><AnalyzeWithAI kind="collection" id={category.id} title={category.name} /></div>
+            )}
+            {isLocal && items.length > 0 && (
+              <div className="cd-filter">
+                <input value={fq} onChange={(e) => setFq(e.target.value)} placeholder="Search in this collection" aria-label="Search in this collection" />
+                {bookTitles.length > 1 && (
+                  <select value={fbook} onChange={(e) => setFbook(e.target.value)} aria-label="Filter by book">
+                    <option value="all">All books</option>{bookTitles.map((b) => <option key={b}>{b}</option>)}
+                  </select>
+                )}
+              </div>
+            )}
+            {isLocal && missing.length > 0 && (
+              <p className="muted cd-howto">{missing.length} saved finding{missing.length === 1 ? ' is' : 's are'} no longer available (deleted or hidden). <button className="link-btn" onClick={() => { if (stored) persist({ ...stored, items: stored.items.filter((i) => !missing.includes(i.id)) }); setMissing([]); }}>Remove {missing.length === 1 ? 'it' : 'them'}</button></p>
+            )}
             <p className="muted cd-howto">Click any finding to read it here in the side panel, or open it in its book.</p>
           </>
         )}
@@ -475,10 +600,10 @@ export function CategoryDetail() {
             <div className="state-block error" role="alert"><h3>Couldn't load the findings</h3>
               <div className="state-actions"><button className="primary" onClick={() => loadItems(0)}>Try again</button></div></div>
           ) : state === 'idle' && items.length === 0 ? (
-            <div className="state-block"><h3>No findings in this collection yet</h3><p>Findings are added to a collection from their book page.</p></div>
+            <div className="state-block"><h3>No findings in this collection yet</h3><p>{isLocal ? <>Add findings from a book page, or <Link to="/collections/import">import a JSON file</Link>.</> : 'Findings are added to a collection from their book page.'}</p></div>
           ) : (
             <ul className="cd-list">
-              {items.map((it) => {
+              {shownItems.map((it) => {
                 const { heading, book } = it;
                 const { title, body } = splitHeading(heading.content);
                 const isOpen = !!expanded[heading.id];
@@ -504,6 +629,11 @@ export function CategoryDetail() {
                       {body && (
                         <p className={`cd-item-excerpt ${isOpen ? 'open' : ''}`}>{body}</p>
                       )}
+                      {isLocal && noteOf(heading.id) && noteEdit !== heading.id && <p className="cd-item-note">Note: {noteOf(heading.id)}</p>}
+                      {isLocal && noteEdit === heading.id && (
+                        <textarea className="cd-note-in" rows={2} autoFocus defaultValue={noteOf(heading.id)} placeholder="Write a note"
+                          onBlur={(e) => { setNote(heading.id, e.target.value.trim()); setNoteEdit(null); }} />
+                      )}
                       <p className="cd-item-meta">
                         {book.cover_image_url && <img src={book.cover_image_url} alt="" className="cd-item-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                         <span className="cd-item-book">{book.title}</span>
@@ -518,6 +648,8 @@ export function CategoryDetail() {
                         )}
                         <button className="link-btn" onClick={open}>Preview</button>
                         <Link className="link-btn" to={href}>Read in book</Link>
+                        {isLocal && <button className="link-btn" onClick={() => setNoteEdit(heading.id)}>{noteOf(heading.id) ? 'Edit note' : 'Add note'}</button>}
+                        {isLocal && <button className="link-btn" onClick={() => removeItem(heading.id)}>Remove</button>}
                         <a className="link-btn cd-newtab" href={href} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> New tab</a>
                       </div>
                     </div>
@@ -529,7 +661,8 @@ export function CategoryDetail() {
           )}
           {items.length > 0 && (
             <div className="list-status">
-              {state === 'error' ? (<><span>Couldn't load more findings.</span><button className="link-btn" onClick={() => loadItems(items.length)}>Retry</button></>)
+              {isLocal ? <span>{fq || fbook !== 'all' ? `${shownItems.length} of ` : 'All '}{plural(items.length, 'finding')}{fq || fbook !== 'all' ? '' : ' shown'}</span>
+                : state === 'error' ? (<><span>Couldn't load more findings.</span><button className="link-btn" onClick={() => loadItems(items.length)}>Retry</button></>)
                 : items.length < total ? (state === 'idle' && <button className="load-more-btn" onClick={() => loadItems(items.length)}>Load more ({total - items.length} left)</button>)
                 : <span>All {plural(total, 'finding')} shown</span>}
             </div>
@@ -566,6 +699,7 @@ export function CategoryDetail() {
           </div>
         )}
       </div>
+      {toast && <div className="cd-toast" role="status" onAnimationEnd={() => setToast('')}>{toast}</div>}
     </div>
   );
 }
@@ -640,6 +774,18 @@ a.cl-row-link:hover .cl-row-title { color: var(--accent); }
 .cd-kicker { margin: 0.7rem 0 0; display: flex; width: fit-content; align-items: center; gap: 0.3rem; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); }
 .cd-title { margin: 0.2rem 0 0.5rem; font-size: 1.6rem; font-weight: 800; line-height: 1.25; word-break: break-word; }
 .cd-howto { margin: 0.55rem 0 0; font-size: 0.8rem; }
+.cl-head-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.cd-tools { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; margin: 0.6rem 0 0; font-size: 0.82rem; }
+.cd-tools .link-btn { display: inline-flex; align-items: center; gap: 0.3rem; }
+.cd-filter { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+.cd-filter input, .cd-filter select { min-height: 40px; box-sizing: border-box; padding: 0 0.75rem; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: inherit; font: inherit; }
+.cd-filter input { flex: 1 1 200px; min-width: 0; }
+.cd-filter select { flex: 0 1 220px; max-width: 100%; }
+.cd-item-note { margin: 0 0 0.5rem; font-size: 0.85rem; color: var(--muted); }
+.cd-note-in { width: 100%; margin: 0 0 0.5rem; font: inherit; }
+.cd-toast { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%); z-index: 60; padding: 0.5rem 0.9rem; border-radius: 8px; font-size: 0.85rem;
+  background: var(--fg); color: var(--bg); animation: cdToast 2.6s forwards; }
+@keyframes cdToast { 0%,85% { opacity: 1; } 100% { opacity: 0; } }
 .cd-desc p { margin: 0 0 0.25rem; max-width: 720px; color: color-mix(in srgb, var(--fg) 78%, var(--muted)); }
 .cd-stats { margin-top: 0.5rem; }
 
@@ -648,7 +794,7 @@ a.cl-row-link:hover .cl-row-title { color: var(--accent); }
 .cd-item:hover { background: color-mix(in srgb, var(--accent) 4%, transparent); }
 .cd-item:hover .cd-item-title { color: var(--accent); }
 .cd-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.cd-item.is-active { background: color-mix(in srgb, var(--accent) 8%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+.cd-item.is-active { background: color-mix(in srgb, var(--accent) 8%, transparent);  }
 .cd-item-main { padding: 1rem 0.4rem; }
 .cd-item-title { margin: 0 0 0.35rem; font-size: 1.06rem; font-weight: 700; line-height: 1.4; font-family: var(--font-serif), 'Hind Siliguri', Georgia, serif; word-break: break-word; }
 .cd-item-title { transition: color .15s; }
