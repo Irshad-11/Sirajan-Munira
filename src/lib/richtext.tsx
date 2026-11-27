@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import React, { useState } from 'react';
 import type { RichDoc } from './supabase';
 
@@ -141,7 +142,7 @@ export function ImageLightboxProvider({ children }: { children: React.ReactNode 
         <div className="lightbox-backdrop" onClick={() => setActive(null)}>
           <div className="lightbox-panel" onClick={(e) => e.stopPropagation()}>
             <button className="lightbox-close" onClick={() => setActive(null)} aria-label="Close">
-              ✕
+              <X size={18} aria-hidden />
             </button>
             <img src={active.src} alt={active.alt || ''} />
           </div>

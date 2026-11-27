@@ -89,3 +89,12 @@ Deploy on Vercel as usual. `vercel.json` rewrites the AI URLs to one serverless 
 | `/ai-integration/test` | Endpoint self-test |
 
 `npm run dev` serves the same endpoints locally. No database changes are required. Semantic mode reuses the existing `semantic-search` edge function.
+
+
+## Collections, guide & migration notes (v2)
+
+New pages: `/collections/import` (paste AI JSON, validate, save Temporary/Local/Global), `/my-collections`, `/guide` (Bengali reader's guide), plus whole-book search, Jump box and Cite/Add buttons on every book page.
+
+**Migration:** no database changes. Redeploy; keep the same env vars. Old URLs keep working (`/book/<slug>.txt|.json`, `/download`, `?from=`; Bengali slugs also reachable as `/book/book-<8 id chars>`). AI files changed format: parts end with `NEXT:`/`END OF BOOK` (the old `CONTINUE WITH` line is gone) and no longer contain a disclaimer. Local collections live in the browser (`localStorage`, key `sm_local_collections_v1`).
+
+**Tuning:** `AI_PART_BYTES` (default ≈ 60000) sets text-part size. Data-quality report: `/ai-integration/quality`. Self-test (admin menu): `/ai-integration/test`.

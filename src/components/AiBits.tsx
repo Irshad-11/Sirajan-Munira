@@ -7,7 +7,7 @@ import { copyToClipboard } from '../lib/richtext';
 import { GENAI_APPS, aiUrls, bookAiUrls, bookPrompt, collectionAiUrls, collectionPrompt, searchPrompt, siteOrigin } from '../lib/ai';
 
 // ---------------------------------------------------------------------------
-// Animated brand-logo carousel: ChatGPT → Gemini → Claude, crossfading.
+// Animated brand-logo carousel: ChatGPT › Gemini › Claude, crossfading.
 // ---------------------------------------------------------------------------
 export function AiLogoCycle({ size = 18 }: { size?: number }) {
   return (
@@ -100,7 +100,7 @@ function CopiedGuide({ prompt, onDone }: { prompt: string; onDone?: () => void }
           );
         })}
       </div>
-      <p className="ai-fine">If the box is empty, paste: <b>Ctrl+V</b> (⌘+V on Mac) or <b>long-press → Paste</b> on phones. Turn on web search/browsing in the AI so it can read the files.</p>
+      <p className="ai-fine">If the box is empty, paste: <b>Ctrl+V</b> (⌘+V on Mac) or <b>long-press › Paste</b> on phones. Turn on web search/browsing in the AI so it can read the files.</p>
     </div>
   );
 }
@@ -145,7 +145,7 @@ export function AnalyzeWithAI({ kind = 'book', slug, id, title }: { kind?: 'book
 
           <label className="ai-lbl" htmlFor="ai-q">Your question <span>(optional — you can also type it after pasting)</span></label>
           <textarea id="ai-q" className="ai-q" rows={3} value={q} onChange={(e) => { setQ(e.target.value); setCopied(false); }}
-            placeholder={kind === 'book' ? 'e.g. What do the findings say about patience?' : 'e.g. Summarise all findings on this topic'} />
+            placeholder={kind === 'book' ? 'যেমন: সবর নিয়ে কী আছে?' : 'যেমন: এই বিষয়ের সারাংশ'} />
 
           <button type="button" className="ai-copy" onClick={copy}>
             {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? 'Copied — copy again' : 'Copy prompt'}

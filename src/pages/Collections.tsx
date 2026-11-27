@@ -89,7 +89,7 @@ function CategoryForm({ initial, onSave, onCancel }: { initial: Category | null;
 
   return (
     <div className="split-detail">
-      <button className="link-btn detail-close" onClick={onCancel}>← Close</button>
+      <button className="link-btn detail-close" onClick={onCancel}><ArrowLeft size={14} aria-hidden /> Close</button>
       <h3>{initial ? 'Edit collection' : 'New collection'}</h3>
       <label>Name <input value={name} onChange={(e) => setName(e.target.value)} required /></label>
       <label>Color <input type="color" value={color} onChange={(e) => setColor(e.target.value)} /></label>
@@ -539,7 +539,7 @@ export function CategoryDetail() {
 
         {selected && (
           <div className="split-detail cd-preview" key={selected.heading.id}>
-            <button className="link-btn detail-close" onClick={() => setSelected(null)}>← Close</button>
+            <button className="link-btn detail-close" onClick={() => setSelected(null)}><ArrowLeft size={14} aria-hidden /> Close</button>
             <div className="side-panel-head">
               <div>
                 <p className="cd-preview-book">{selected.book.title}</p>

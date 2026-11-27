@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Pencil, Trash2, FolderPlus } from 'lucide-react';
+import { Pencil, Trash2, FolderPlus, ArrowLeft, ArrowRight } from 'lucide-react';
 import {
   Draft,
   DraftFolder,
@@ -134,7 +134,7 @@ export default function Drafts() {
     <div className="page drafts-page">
       <div className="page-head">
         <h1>Draft space</h1>
-        <button className="secondary" onClick={() => setSidebarOpen((s) => !s)}>{sidebarOpen ? '← Collapse' : 'Folders →'}</button>
+        <button className="secondary" onClick={() => setSidebarOpen((s) => !s)}>{sidebarOpen ? <><ArrowLeft size={14} aria-hidden /> Collapse</> : <>Folders <ArrowRight size={14} aria-hidden /></>}</button>
       </div>
       <div className={`drafts-layout ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
         {sidebarOpen && (

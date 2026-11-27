@@ -3,7 +3,7 @@
 const CACHE = 'sm-v2';
 // Raw AI/export endpoints are served by the server and must never be cached or
 // treated as an app page (they would otherwise overwrite the cached app shell).
-const RAW = /^\/(llms\.txt|ai-integration\/(SKILL|SEARCH|CITATION)\.md|ai-integration\/(search|verify)|book\/[^/]+(\.txt|\.json|\/download)|collections\/[^/]+\.(txt|json))$/;
+const RAW = /^\/(llms\.txt|index\.tsv|synonyms\.txt|openapi\.json|f\/[^/]+\.txt|ai-integration\/(SKILL|SEARCH|CITATION)\.md|ai-integration\/(search|verify|quality)|book\/[^/]+(\.txt|\.json|\/download|\/part-\d+\.txt|\/index(-\d+)?\.tsv|\/keywords(-\d+)?\.tsv)|collections\/[^/]+\.(txt|json))$/;
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/favicon.png', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/logo-sketch.png'];
 
 self.addEventListener('install', (e) => {

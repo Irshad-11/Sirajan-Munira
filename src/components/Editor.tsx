@@ -11,6 +11,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import {
   Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon,
   List, ListOrdered, Quote, Minus, Link2, Image as ImageIcon, ChevronsDownUp,
+  X as XIcon, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import type { RichDoc } from '../lib/supabase';
 import { uploadImage } from '../lib/supabase';
@@ -59,7 +60,7 @@ function AccordionView({ node, updateAttributes }: any) {
           contentEditable={false}
           onClick={() => updateAttributes({ open: !node.attrs.open })}
         >
-          {node.attrs.open ? '▾' : '▸'}
+          {node.attrs.open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
         </button>
         <input
           className="accordion-title-input"
@@ -360,7 +361,7 @@ function Toolbar({ editor, imagePathPrefix, sticksToWindow }: { editor: any; ima
         {HIGHLIGHT_COLORS.map((c) => (
           <button key={c} className="swatch" style={{ background: c }} onClick={() => editor.chain().focus().toggleHighlight({ color: c }).run()} />
         ))}
-        <button onClick={() => editor.chain().focus().unsetHighlight().run()}>✕</button>
+        <button onClick={() => editor.chain().focus().unsetHighlight().run()} aria-label="Remove highlight"><XIcon size={14} /></button>
       </div>
 
       <select

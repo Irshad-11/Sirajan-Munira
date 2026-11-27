@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, LogIn, LogOut, Search as SearchIcon, X, Menu, Bookmark, Pin, ChevronUp, ChevronDown, FileText, Wand2, Quote, FlaskConical, Search as SearchDocIcon } from 'lucide-react';
+import { Bot, Check, Settings as SettingsIcon, LogIn, LogOut, Search as SearchIcon, X, Menu, Bookmark, Pin, ChevronUp, ChevronDown, FileText, Wand2, Quote, FlaskConical, BookOpen, ClipboardPaste, FolderOpen, Search as SearchDocIcon } from 'lucide-react';
 import { AiLogoCycle } from './AiBits';
 import { useAdmin, usePrefs, THEMES } from '../lib/context';
 import { getUnreadMessageCount, getSiteSetting, setSiteSetting } from '../lib/supabase';
@@ -149,6 +149,10 @@ function NavMore({ closeMenu, isAdmin }: { closeMenu: () => void; isAdmin: boole
       {open && (
         <div className="nav-more-panel" role="menu">
           <p className="nav-more-h">AI &amp; research</p>
+          <Link role="menuitem" to="/#guide" onClick={pick}><BookOpen size={16} /><span><b>পাঠকের গাইড</b><small>সাইট ব্যবহারের নির্দেশনা</small></span></Link>
+          <Link role="menuitem" to="/#ai-agents" onClick={pick}><Bot size={16} /><span><b>AI এজেন্ট সিস্টেম <em className="nav-new">নতুন</em></b><small>AI দিয়ে খোঁজা ও বিশ্লেষণ</small></span></Link>
+          <Link role="menuitem" to="/collections/import" onClick={pick}><ClipboardPaste size={16} /><span><b>Import collection</b><small>AI-এর JSON পেস্ট করুন</small></span></Link>
+          <Link role="menuitem" to="/my-collections" onClick={pick}><FolderOpen size={16} /><span><b>My collections</b><small>এই ডিভাইসে সেভ করা</small></span></Link>
           <Link role="menuitem" to="/ai-integration" onClick={pick}><AiLogoCycle size={16} /><span><b>AI Integration</b><small>Use ChatGPT, Claude, Gemini with the books</small></span></Link>
           {raw('/llms.txt', <FileText size={16} />, 'llms.txt', 'Index of all books for AI agents')}
           {raw('/ai-integration/SKILL.md', <Wand2 size={16} />, 'SKILL.md', 'Rules & skill file for AI agents')}
@@ -377,7 +381,7 @@ function FooterYear() {
           autoFocus
           size={4}
         />
-        <button className="footer-year-save link-btn" onClick={save}>✓</button>
+        <button className="footer-year-save link-btn" onClick={save} aria-label="Save"><Check size={14} /></button>
       </span>
     );
   }
@@ -406,6 +410,8 @@ export function SiteFooter() {
           <Link to="/books">Bookshelf</Link>
           <Link to="/collections">Collections</Link>
           <Link to="/search">Search</Link>
+          <Link to="/#guide">পাঠকের গাইড</Link>
+          <Link to="/my-collections">My collections</Link>
           <Link to="/ai-integration">AI Integration</Link>
           <Link to="/bookmarks">Bookmarks</Link>
           <Link to="/about">About</Link>

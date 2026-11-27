@@ -3,8 +3,7 @@ import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Link2, Bookmark, Copy, Pencil, FolderPlus, Trash2, Check, ChevronDown, ChevronRight,
-  ChevronLeft, Plus, ListTree, MoreVertical, ArrowUp, ArrowDown, Star, Type, X, Loader2, Search as SearchIcon,
-} from 'lucide-react';
+  ChevronLeft, Quote, Plus, ListTree, MoreVertical, ArrowUp, ArrowDown, Star, Type, X, Loader2, Search as SearchIcon, ArrowLeft } from 'lucide-react';
 import {
   Book, Category, Heading, HeadingIndexRow, addHeadingToCategory, createHeading, deleteHeading,
   findHeadingIdsInBook, getBookBySlug, getChunkText, getHeadingsByIds, listCategories,
@@ -19,6 +18,7 @@ import {
 import { RichEditor } from '../components/Editor';
 import { BookExportBar } from '../lib/bookExport';
 import { AnalyzeWithAI } from '../components/AiBits';
+import { AddToCollectionMenu, BookFind } from '../components/BookTools';
 import {
   clearHighlight, findPassageRange, findTermRanges, highlightApiSupported, paintHighlight, splitTerms,
 } from '../lib/highlight';
@@ -223,7 +223,7 @@ function HeadingThreeDot({ heading, book, isAdmin, onImportanceDone }: {
               <button role="menuitem" onClick={() => copy('plain')}><Copy size={12} /> Copy as plain text</button>
               {isAdmin && (
                 <button role="menuitem" onClick={() => setMode('importance')}>
-                  <Star size={12} /> Importance level{heading.importance_level ? ` (${heading.importance_level}★)` : ''}
+                  <Star size={12} /> Importance level{heading.importance_level ? ` (${heading.importance_level}/5)` : ''}
                 </button>
               )}
             </>
@@ -292,7 +292,8 @@ function HeadingBlock({
   const { isAdmin } = useAdmin();
   const { toggleBookmark, isBookmarked, copySettings } = usePrefs();
   const [readMore, setReadMore] = useState(false);
-  const [copied, setCopied] = useState<'link' | 'content' | null>(null);
+  const [copied, setCopied] = useState<'link' | 'content' | 'cite' | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const bookmarked = isBookmarked(heading.id);
 
   const plain = useMemo(() => docToPlainText(heading.content), [heading.content]);
@@ -301,7 +302,7 @@ function HeadingBlock({
   const permalink = `${SITE_URL}/book/${book.slug}#${heading.id}`;
   const externalSource = book.source_links?.[0]?.url;
 
-  const flash = (k: 'link' | 'content') => { setCopied(k); setTimeout(() => setCopied(null), 1800); };
+  const flash = (k: 'link' | 'content' | 'cite') => { setCopied(k); setTimeout(() => setCopied(null), 1800); };
 
   const copyUrl = async () => {
     if (!(await copyToClipboard(permalink))) window.prompt('Copy this link:', permalink);
@@ -320,6 +321,12 @@ function HeadingBlock({
     if (!(await copyToClipboard(text))) window.prompt('Copy this text:', text);
     flash('content');
     trackEvent('interact', 'heading', heading.id);
+  };
+
+  const copyCitation = async () => {
+    const text = [`${heading.title_text || firstLineOf(heading.content, 80)}`, `${book.title}${book.author ? ' — ' + book.author : ''}`, `PDF page: ${heading.page_number ?? 'not recorded'}`, permalink].join('\n');
+    if (!(await copyToClipboard(text))) window.prompt('Copy this citation:', text);
+    flash('cite');
   };
 
   const remove = async () => {
@@ -359,6 +366,13 @@ function HeadingBlock({
         <button onClick={copyContent} aria-label="Copy content with citation">
           {copied === 'content' ? <Check size={15} /> : <Copy size={15} />} {copied === 'content' ? 'Copied!' : 'Copy'}
         </button>
+        <button onClick={copyCitation} aria-label="Copy citation">
+          {copied === 'cite' ? <Check size={15} /> : <Quote size={15} />} {copied === 'cite' ? 'Copied!' : 'Cite'}
+        </button>
+        <span className="hb-add-wrap">
+          <button onClick={() => setAddOpen((v) => !v)} aria-expanded={addOpen} aria-label="Add to collection"><FolderPlus size={15} /> Add</button>
+          {addOpen && <AddToCollectionMenu headingId={heading.id} isAdmin={isAdmin} onClose={() => setAddOpen(false)} />}
+        </span>
         {isAdmin && (
           <>
             <button onClick={() => onEditRequest(heading)}><Pencil size={15} /> Edit</button>
@@ -441,7 +455,7 @@ function HeadingEditorPanel({ book, panel, nextSortOrder, onClose, onSaved }: {
     {/* small screens: the form floats as a sheet with breathing room above and below */}
     <div className="bp-editor-backdrop" aria-hidden="true" />
     <div className="split-detail bp-editor-panel" role="dialog" aria-label={isEdit ? 'Edit heading' : 'New heading'}>
-      <button className="link-btn detail-close" onClick={onClose}>← Close</button>
+      <button className="link-btn detail-close" onClick={onClose}><ArrowLeft size={14} aria-hidden /> Close</button>
       <h3>{isEdit ? 'Edit heading' : 'New heading'}</h3>
       {!isEdit && (
         <label>Level
@@ -1162,6 +1176,7 @@ function BookPageInner() {
         />
 
         <div className="book-main">
+          <BookFind bookId={book.id} bookSlug={book.slug} index={index} ready={indexState === 'ready'} onJump={(id) => jumpTo(id)} />
           <div className="book-toolbar no-print">
             <div className="book-sort-tabs" role="tablist" aria-label="Order">
               {([

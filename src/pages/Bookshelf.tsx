@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Pencil, Eye, EyeOff, Trash2, Plus, Star, ChevronRight, Loader2, BookOpen } from 'lucide-react';
+import { Pencil, Eye, EyeOff, Trash2, Plus, Star, ChevronRight, Loader2, BookOpen, X, ArrowLeft } from 'lucide-react';
 import {
   Book, BookStats, createBook, deleteBook, getBookStatsMany, listBooksPage,
   replaceSourceLinks, updateBook, uploadImage,
@@ -95,7 +95,7 @@ function BookForm({ initial, onSave, onCancel }: {
 
   return (
     <div className="split-detail book-form">
-      <button className="link-btn detail-close" onClick={onCancel}>← Close</button>
+      <button className="link-btn detail-close" onClick={onCancel}><ArrowLeft size={14} aria-hidden /> Close</button>
       <h3>{initial ? 'Edit book' : 'New book'}</h3>
       <label>Cover image <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], 'cover')} /></label>
       {uploading === 'cover' && <p className="muted"><Loader2 size={12} className="spin" /> Uploading…</p>}
@@ -110,7 +110,7 @@ function BookForm({ initial, onSave, onCancel }: {
         {form.detail_image_urls.map((u, i) => (
           <div key={i} className="thumb">
             <img src={u} alt="" />
-            <button aria-label="Remove image" onClick={() => setForm((f) => ({ ...f, detail_image_urls: f.detail_image_urls.filter((_, j) => j !== i) }))}>✕</button>
+            <button aria-label="Remove image" onClick={() => setForm((f) => ({ ...f, detail_image_urls: f.detail_image_urls.filter((_, j) => j !== i) }))}><X size={14} aria-hidden /></button>
           </div>
         ))}
       </div>
@@ -121,7 +121,7 @@ function BookForm({ initial, onSave, onCancel }: {
         <div key={i} className="source-link-row">
           <input placeholder="Label" aria-label="Link label" value={l.label} onChange={(e) => setLink(i, { label: e.target.value })} />
           <input placeholder="https://…" aria-label="Link URL" value={l.url} onChange={(e) => setLink(i, { url: e.target.value })} />
-          <button aria-label="Remove link" onClick={() => setForm({ ...form, source_links: form.source_links.filter((_, j) => j !== i) })}>✕</button>
+          <button aria-label="Remove link" onClick={() => setForm({ ...form, source_links: form.source_links.filter((_, j) => j !== i) })}><X size={14} aria-hidden /></button>
         </div>
       ))}
       <button className="secondary" onClick={() => setForm({ ...form, source_links: [...form.source_links, { label: '', url: '' }] })}>+ Add source link</button>

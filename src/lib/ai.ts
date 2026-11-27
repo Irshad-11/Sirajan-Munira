@@ -13,13 +13,21 @@ export const aiUrls = (origin = siteOrigin()) => ({
   search: `${origin}/ai-integration/SEARCH.md`,
   citation: `${origin}/ai-integration/CITATION.md`,
   guide: `${origin}/ai-integration`,
+  index: `${origin}/index.tsv`,
+  readers: `${origin}/#guide`,
+  openapi: `${origin}/openapi.json`,
   searchApi: `${origin}/ai-integration/search`,
   verifyApi: `${origin}/ai-integration/verify`,
 });
 
+const safeKey = (slug: string) => (/^[\x21-\x7e]+$/.test(slug) && !/[?#%]/.test(slug) ? slug : encodeURIComponent(slug));
+
 export const bookAiUrls = (slug: string, origin = siteOrigin()) => {
-  const base = `${origin}/book/${slug}`;
-  return { page: base, txt: `${base}.txt`, json: `${base}.json`, dlTxt: `${base}/download?format=txt`, dlJson: `${base}/download?format=json` };
+  const base = `${origin}/book/${safeKey(slug)}`;
+  return {
+    page: base, txt: `${base}.txt`, json: `${base}.json`, index: `${base}/index.tsv`, keywords: `${base}/keywords.tsv`,
+    dlTxt: `${base}/download?format=txt`, dlJson: `${base}/download?format=json`,
+  };
 };
 
 export const collectionAiUrls = (id: string, origin = siteOrigin()) => ({
@@ -28,11 +36,10 @@ export const collectionAiUrls = (id: string, origin = siteOrigin()) => ({
 
 export const QUESTION_PLACEHOLDER = '[WRITE YOUR QUESTION HERE]';
 
-const RULES = `Rules:
-- The site publishes Bengali research FINDINGS written from original Arabic/Urdu books — they are NOT the original text and NOT a certified translation.
-- Cite every claim: book, finding heading, heading ID, original PDF page number ("not recorded" if missing), permalink. Keep exact quotations separate from paraphrase.
-- Say how many findings you actually read (each file header shows TOTAL FINDINGS). If you could not open a link or read everything, tell me — never guess or claim a complete search you did not do. If you cannot browse at all, say so and I will paste the text.
-- Answer in the language of my question (Bengali by default). Present what the findings say; for personal religious rulings, advise consulting a qualified scholar.`;
+const RULES = `Rules (full version: ANSWER FORMAT at the top of llms.txt):
+- Cite every finding with its full permalink, book, PDF page ("not recorded" if missing) and first words.
+- Say how many findings you actually read out of the total; if a file could not be opened or was cut off, say so — never guess or claim a complete search you did not do.
+- Keep exact quotes separate from your own summary. Answer in the language of my question (Bengali by default).`;
 
 const ASK = (q?: string) => `MY QUESTION:
 ${q?.trim() || QUESTION_PLACEHOLDER}
@@ -42,13 +49,13 @@ ${q?.trim() ? '' : '(If the line above still shows the placeholder, reply only "
 export function bookPrompt(opts: { title: string; slug: string; question?: string; origin?: string }) {
   const u = aiUrls(opts.origin);
   const b = bookAiUrls(opts.slug, opts.origin);
-  return `You are a careful research assistant for the book "${opts.title}" on Sirājan Munīrā.
+  return `You are a research assistant for the book "${opts.title}" on Sirājan Munīrā.
 
 Step 1 — Read these raw files (plain text, no JavaScript; open them with your browsing/fetch tool):
 1. ${u.llms}
 2. ${u.skill}
-3. This book's complete findings: ${b.txt}   (structured version: ${b.json})
-If a file is split, follow its "CONTINUE WITH:" line until the end.
+3. This book's findings: ${b.txt}   (structured version: ${b.json}; list of all findings: ${b.index})
+The text is split into parts — follow each "NEXT:" link until you see "END OF BOOK".
 
 Step 2 — Using ONLY this book's findings, answer my question. Analyse across ALL findings, not just the first match; group related findings and note disagreements.
 
@@ -61,7 +68,7 @@ ${ASK(opts.question)}`;
 export function collectionPrompt(opts: { name: string; id: string; question?: string; origin?: string }) {
   const u = aiUrls(opts.origin);
   const c = collectionAiUrls(opts.id, opts.origin);
-  return `You are a careful research assistant for the topic collection "${opts.name}" on Sirājan Munīrā.
+  return `You are a research assistant for the topic collection "${opts.name}" on Sirājan Munīrā.
 
 Step 1 — Read these raw files (plain text, no JavaScript):
 1. ${u.llms}
@@ -81,12 +88,13 @@ export function searchPrompt(opts: { query?: string; bookSlug?: string | null; b
   const scope = opts.bookSlug
     ? `Restrict the search to the book "${opts.bookTitle || opts.bookSlug}" (add &book=${opts.bookSlug} to search calls; its full text is ${bookAiUrls(opts.bookSlug, opts.origin).txt}).`
     : 'Search ALL books listed in llms.txt.';
-  return `You are a high-accuracy research assistant for Sirājan Munīrā, an archive of Bengali findings from original Arabic/Urdu books.
+  return `You are a high-accuracy research assistant for Sirājan Munīrā, an archive of Bengali findings.
 
 Step 1 — Read these raw files first (plain text, not JavaScript pages; use your browsing/fetch tool):
 1. ${u.llms}   (all books, TXT/JSON/download URLs)
 2. ${u.skill}   (how to search, cite and verify)
 3. ${u.search}   (search API: exact / keyword / semantic)
+4. ${u.index}   (index of every finding: id, title, PDF page, first words, permalink)
 
 Step 2 — Search carefully. ${scope}
 - Rewrite my query into several Bengali phrasings, key words and spelling variants, and run each through ${u.searchApi}?q=<phrase>&mode=auto
@@ -105,7 +113,7 @@ ${opts.query?.trim() ? '' : '(If the line above still shows the placeholder, rep
 export function generalPrompt(origin?: string) {
   const u = aiUrls(origin);
   return `Please act as a research assistant for the Sirājan Munīrā archive (Bengali findings from original Arabic/Urdu books).
-First read, as raw plain-text files: ${u.llms} and ${u.skill}. Follow the rules in them for the rest of this conversation: discover books via llms.txt, read each book's TXT/JSON export, search with the search API, cite book + heading ID + original PDF page + permalink, separate exact quotes from paraphrase, and never present findings as the original text or a certified translation. If you cannot access something, say so.
+First read, as raw plain-text files: ${u.llms} and ${u.skill}. Follow the ANSWER FORMAT in them for the rest of this conversation: discover books via llms.txt, use index.tsv and the book part files, search with the search API, cite every finding with its full permalink, book and PDF page, separate exact quotes from your summary, and say how many findings you read. If you cannot access something, say so.
 Confirm when you have read both files, then wait for my question.
 
 ${ASK()}`;

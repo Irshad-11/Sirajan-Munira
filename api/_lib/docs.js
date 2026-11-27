@@ -1,137 +1,106 @@
-// Markdown documents served to AI agents. Written for an AI reader: precise,
-// imperative, and explicit about limits. {{SITE}} is replaced per request.
+// Markdown/text documents served to AI agents. Neutral metadata only — no disclaimers.
 
-export const SKILL_MD = `---
+const exLine = (e) => (e ? `${e.link}\n   Book: ${e.book}, original PDF page ${e.page}. First words: "${e.words.replace(/ …$/, '')}"` : '(example unavailable)');
+
+export function answerFormat(site, ex = []) {
+  const a = ex[0], b = ex[1] || ex[0];
+  return `## ANSWER FORMAT (strict — read before answering)
+1. Reply in the user's language as natural prose or lists. Do NOT wrap normal answers in code blocks, JSON or any structural wrapper unless the user explicitly asks for a JSON / collection export.
+2. For EVERY finding you cite give: (a) the FULL clickable permalink as a plain URL, never shortened or rewritten; (b) the book name and the original-PDF page ("not recorded" if missing); (c) the first words of the finding copied exactly, in quotation marks, at most ~12 words. Do not print the ID separately (it is inside the link). Never invent a link: use only permalinks that appeared in site data.
+3. Mention the book's original-source PDF link once per book you used.
+4. No generic disclaimers, no filler. Exception: if your reading was incomplete, add ONE short line saying how many findings you actually read out of the total.
+5. Internally classify each hit as exact / keyword / semantic. Never present a semantic-only hit as an exact quote.
+6. Search strategy: read ${site}/index.tsv first (then the book keyword files), try several Bengali phrasings and synonyms (${site}/synonyms.txt), open only the findings you need to confirm context, collect ALL relevant findings across ALL books, order them by relevance.
+7. If the user asks for JSON / a collection export, output exactly ONE JSON object in schema "sirajan-collection/1" (see below) and nothing around it except the one-line "read X of Y" statement.
+8. Never alter quoted text: quote exactly, or paraphrase and label it as a paraphrase.
+
+### Example 1 — prose answer
+User: "Which findings cover ${JSON.stringify(a?.title ?? 'this topic')}?"
+Answer:
+Two findings in the archive deal with this.
+1. ${exLine(a)}
+2. ${exLine(b)}
+Original PDF of ${a?.book ?? 'the book'}: <the book's PDF link from index.tsv>.
+(I read 2 of 2 candidate findings found through the index.)
+
+### Example 2 — JSON answer (only when the user asks for JSON / a collection)
+{"schema":"sirajan-collection/1","name":${JSON.stringify((a?.title ?? 'Topic').slice(0, 40))},"query":${JSON.stringify(`Which findings cover ${a?.title ?? 'this topic'}?`)},"items":[{"url":"${a?.link ?? `${site}/book/<book-slug>#<heading-id>`}","book":"${a?.slug ?? '<book-slug>'}","title":${JSON.stringify(a?.title ?? '<title>')},"pdf_page":"${a?.page ?? 'not recorded'}","first_words":${JSON.stringify((a?.words ?? '<first words>').replace(/ …$/, ''))},"match":"exact","note":"one-line reason"}]}
+Read 2 of 2 findings.
+
+### Collection JSON schema "sirajan-collection/1"
+{"schema":"sirajan-collection/1","name":"...","description":"optional","query":"user's question","items":[{"url":"full permalink (or \\"id\\": heading UUID)","book":"book slug","title":"finding heading","pdf_page":"41 | 36-37 | not recorded","first_words":"exact first words","match":"exact|keyword|semantic","relevance":1,"note":"one-line reason"}]}
+Only "url" or "id" is required per item. Use the real permalinks. The site checks every item against its database.`;
+}
+
+export function tiers(site) {
+  return `## CAPABILITY TIERS — adapt to your tools
+- Browsing agent (can open URLs you were given): follow the links in this file. Open ${site}/index.tsv, then a book's index and keyword files, then single findings (${site}/f/<id>.txt) or book text parts. You cannot build query URLs? Then do not use the search API; the static files are enough.
+- Agent with only uploaded files: use the files the user attached (index, keywords, book parts). Every file ends with an END marker that says whether more parts exist.
+- Agent with code execution: download index.tsv / keywords TSV / book JSON and grep, awk, jq or Python over them; search by word PREFIX (Bengali inflects: নামাজ, নামাজের, নামাজে).
+- Agent with API / MCP / custom-GPT actions: use ${site}/openapi.json (search, verify, finding, part endpoints).
+Always read to the END marker of each file. If a file has "NEXT:" it continues there; "END OF ... complete" means nothing is missing. If you could not read everything, say how much you did read.`;
+}
+
+export const skillMd = (site, ex) => `---
 name: sirajan-munira-research
-description: Research the Sirājan Munīrā archive of Bengali findings (extracted from original Arabic/Urdu books). Use when the user asks a question about a book on {{SITE}}, wants hadith/topic findings, wants sources with original-PDF page numbers, or wants a quotation verified.
+description: Research the Sirājan Munīrā archive (Bengali findings from Arabic/Urdu books). Use when the user asks about a book or topic on ${site}, wants findings with permalinks and original-PDF pages, or wants a collection JSON.
 ---
 
-# Sirājan Munīrā — research skill
+# Sirājan Munīrā — working method
 
-Site: {{SITE}}
+Site: ${site}
 
-## 1. What this content is (read carefully)
+${answerFormat(site, ex)}
 
-- The site does **not** publish the original Arabic/Urdu books. Editors read the original PDFs and write **Findings in Bengali**: facts, explanations and research statements, each tied to the original book's **PDF page number** and to a **permanent heading link** on the website.
-- A Finding is therefore **not** the original text and **not** a certified translation. Never call it "the original text", "the author's words" or "a translation of the book". Say "the website's Bengali finding states…", and give the PDF page so the user can check the original.
-- Quotation rules: text copied word-for-word from a finding is an **exact quotation of the website finding**. Anything you reword is a **paraphrase**. Label which is which.
+${tiers(site)}
 
-## 2. Discover content (no JavaScript needed)
+## Data model
+- Book → findings. A finding has: title (heading), ID (UUID), original-PDF page, permalink \`${site}/book/<book-slug>#<id>\`, passages.
+- Each book has an ASCII **book key** (its slug, or \`book-xxxxxxxx\` when the slug is Bengali). Both work in URLs.
+- All files carry CONTENT VERSION. Compare it to know whether data changed.
 
-1. GET \`{{SITE}}/llms.txt\` — lists every public book and topic collection with its TXT, JSON, download and (if any) original-PDF URLs.
-2. Choose the book(s) relevant to the question. If unsure, use the search API (section 4) instead of guessing.
+## Static files (preferred)
+| File | Content |
+|---|---|
+| ${site}/llms.txt | this entry point |
+| ${site}/index.tsv | books with index / text / keyword URLs |
+| ${site}/book/<key>/index.tsv | one line per finding: no, book, id, title, pdf_page, first_words, permalink. Parts chain via END markers (also to the next book). |
+| ${site}/book/<key>/keywords.tsv | word → finding numbers (use prefix search) |
+| ${site}/book/<key>/part-N.txt | full text, ~60 KB parts, END marker per part |
+| ${site}/f/<id>.txt | one finding |
+| ${site}/book/<key>.json | whole book, structured |
+| ${site}/collections/<id>.txt / .json | topic collection, light by default (add ?full=1 for text) |
+| ${site}/synonyms.txt | synonym groups |
 
-## 3. Read content
+## Method
+1. Read ${site}/index.tsv → choose books (or all). 2. Read each book's keywords file; look up several words/prefixes and synonyms; collect finding numbers. 3. Read the index rows for those numbers (titles, first words). 4. Open ${site}/f/<id>.txt (or the book part) only to confirm context. 5. Answer in the ANSWER FORMAT above.
 
-| Need | URL | Notes |
-|---|---|---|
-| Whole book, plain text | \`{{SITE}}/book/<slug>.txt\` | Every finding: title, HEADING ID, PDF PAGE, LINK, passages \`[<id>.pN]\`. Large books are split; follow the \`CONTINUE WITH:\` line at the end (\`?from=N\`). |
-| Whole book, structured | \`{{SITE}}/book/<slug>.json\` | Has \`findings[].heading_id\`, \`pdf_page_number\`, \`permalink\`, \`passages[]\`, \`citation\`, \`version\`. |
-| Download file | \`{{SITE}}/book/<slug>/download?format=txt\\|json\` | For agents that can save files. |
-| Topic collection | \`{{SITE}}/collections/<id>.txt\` or \`.json\` | Findings on one topic gathered from many books (e.g. a hadith topic). |
-
-If a file is cut off, truncated by your fetch tool, or you could not read all of it, **tell the user exactly how much you read**. Do not claim to have searched everything.
-
-## 4. Search — choose the right kind
-
-Server-side search (works across every book at once, independent of your fetch/context limits):
-
-\`GET {{SITE}}/ai-integration/search?q=<query>&mode=auto|exact|keyword|semantic&book=<slug>&limit=20&offset=0\`
-
-| Mode | Meaning | Use when |
-|---|---|---|
-| \`exact\` | The whole phrase appears character-for-word in a finding | Verifying or locating a known sentence |
-| \`keyword\` | Every word appears somewhere in the finding (any order). Falls back to "any word" if none match | Topic words, names, terms |
-| \`semantic\` | Meaning-based match; wording may differ completely | Questions, concepts, paraphrases |
-| \`auto\` (default) | Runs all three and labels each result with \`match_type\` | Normal research |
-
-Each result has \`match_type\`: \`exact\`, \`keyword_all\`, \`keyword_any\` or \`semantic\`. **Never present a \`semantic\` hit as a quotation or as an exact match.**
-
-High-accuracy procedure for a user question:
-1. Turn the question into 3–6 Bengali (and, if useful, Arabic-transliterated or English) search phrases: the exact phrase, key nouns, synonyms, alternate Bengali spellings.
-2. Run \`mode=auto\` for each phrase (add \`book=<slug>\` when the user named a book).
-3. Open the best hits' \`permalink\`s or read the relevant book TXT section to confirm context; compare multiple findings.
-4. Answer from what the findings actually say. If findings disagree or are silent, say so.
-
-Bengali spelling varies (e.g. যুক্তাক্ষর, ও/ো, ড়/ড়). Try spelling variants before concluding something is absent.
-
-## 5. Cite every claim
-
-For each finding you rely on, give:
-- Finding heading title
-- Book title (and author if present)
-- Passage / heading ID
-- **Original PDF page number** (say "not recorded" if null — never guess)
-- Website permalink
-- Content version (from the JSON \`version.content_version\`) when precision matters
-
-Cite the **website finding** and the **original book** as two separate references. The JSON \`citation\` field already holds both. See {{SITE}}/ai-integration/CITATION.md.
-
-## 6. Verify quotations
-
-\`GET {{SITE}}/ai-integration/verify?text=<exact text>&book=<slug>\` returns \`exact_match\`, \`partial_match\` (with missing/extra words) or \`no_match\`, plus the finding's real text, permalink and PDF page. It compares only against the website's **Bengali** findings — never say a quote was checked against the original Arabic/Urdu PDF.
-
-## 7. Hard rules
-
-1. Findings are Bengali research summaries, never the original text or a certified translation.
-2. Do not invent page numbers, authors, IDs, URLs or quotes. If metadata is null, say it is unavailable.
-3. If you cannot fetch or verify something, state the limitation instead of guessing.
-4. Do not claim a "complete" or "exhaustive" search unless you read every page of the relevant TXT/JSON or relied on the server-side search's \`coverage\` block, and say which.
-5. Keep exact quotations (copied text) visibly separate from your paraphrase.
-6. Religious rulings: present what the findings say and where; do not issue your own fatwa. Suggest consulting a qualified scholar for personal rulings.
-
-## 8. Quick recipe
-
-1. \`GET {{SITE}}/llms.txt\`
-2. \`GET {{SITE}}/ai-integration/search?q=<phrase>&mode=auto\`
-3. \`GET {{SITE}}/book/<slug>.txt\` (if you need surrounding context)
-4. Answer with citations; flag partial access or semantic-only evidence.
+## Live search (only if you can call constructed URLs)
+\`${site}/ai-integration/search?q=<query>&mode=auto|exact|keyword|semantic&book=<key>&limit=20\` — Bengali may be raw or percent-encoded. Each result: match_type, title, book, pdf_page_number, first_words, permalink. \`${site}/ai-integration/verify?text=<quote>&book=<key>\` → exact_match | partial_match | no_match with the real text.
+See ${site}/ai-integration/SEARCH.md.
 `;
 
-export const SEARCH_MD = `# Search documentation — Sirājan Munīrā
+export const searchMd = (site) => `# Search — Sirājan Munīrā
 
-Base: {{SITE}}/ai-integration/search (HTTP GET, JSON, no JavaScript, CORS open)
+## Without any API (static files)
+1. ${site}/index.tsv → book list. 2. \`${site}/book/<key>/keywords.tsv\` → word, count, finding numbers (parts chain through END markers). 3. Grep by word prefix and spelling variants; Bengali inflects. 4. Map numbers to rows in \`${site}/book/<key>/index.tsv\`. 5. Confirm with ${site}/f/<id>.txt.
+Synonyms: ${site}/synonyms.txt. Spelling variants to try: ী/ি, ূ/ু, ড়/ঢ় written with or without nukta, য়, ো.
 
-## Parameters
-- \`q\` (required) — query, at least 2 characters. Bengali, English or Arabic script.
-- \`mode\` — \`auto\` (default) | \`exact\` | \`keyword\` | \`semantic\`
-- \`book\` — optional book slug to restrict the search (slugs are in {{SITE}}/llms.txt)
-- \`limit\` — 1–50 (default 20), \`offset\` — for paging (\`next_offset\` in the response)
-
-## Match types
-- **exact** — the full phrase occurs in the finding (whitespace/zero-width characters ignored, case-insensitive for Latin).
-- **keyword_all** — every query word occurs in the finding.
-- **keyword_any** — only returned when nothing matched all words; at least one word occurs.
-- **semantic** — nearest by meaning (embedding similarity, threshold 0.55). Not a text match.
-
-## Coverage
-exact and keyword searches run in the database over **all** findings in scope, so they are not limited by an AI's fetch size. The \`coverage\` object states what ran. Semantic search returns only the closest matches above a threshold and is not exhaustive. If semantic search is unavailable the response says so in \`notes\`.
-
-## Response fields
-\`results[]\`: \`match_type\`, \`heading_id\`, \`title\`, \`book{slug,title,author}\`, \`pdf_page_number\`, \`permalink\`, \`snippet\` (and \`similarity\` for semantic).
-
-## Tips
-- Search several phrasings and spellings; combine \`book=\` filters once the right book is known.
-- Always confirm context by opening the \`permalink\` or reading the relevant book TXT before quoting.
-- Verify quotations with {{SITE}}/ai-integration/verify?text=…
+## With the API
+GET ${site}/ai-integration/search — parameters: q (required), mode (auto|exact|keyword|semantic), book (key), limit 1–50, offset. Bengali raw or percent-encoded both work.
+- exact — whole phrase present (encoding differences ignored)
+- keyword_all / keyword_any — all / some words (synonyms and spelling variants applied)
+- semantic — meaning only; never present as a quote
+Exact and keyword run over every finding in the database (not limited by file size).
+OpenAPI: ${site}/openapi.json
 `;
 
-export const CITATION_MD = `# Citation guidelines — Sirājan Munīrā
+export const citationMd = (site) => `# Citation — Sirājan Munīrā
 
-Always cite two things separately.
+For each finding give: full permalink, book name, original-PDF page ("not recorded" if missing), first words in quotation marks (≤ 12 words, copied exactly). Mention the book's original-source PDF link once per book. Do not print the heading ID separately; it is part of the permalink.
 
-## 1. The website finding (what you actually read)
-\`Finding "<heading title>", in "<book title>" (Sirājan Munīrā, Bengali findings), Passage ID <heading_id>, original PDF p. <n>, content version <v>, <permalink>\`
+Format:
+\`<permalink>\` — <book>, PDF p. <page> — "<first words>"
 
-## 2. The original book (where the finding comes from)
-\`Original book: <title>, author: <author>, PDF page <n>, PDF: <original_source_pdf_url>\`
-
-The JSON export (\`{{SITE}}/book/<slug>.json\`) provides both strings in \`findings[].citation\`.
-
-## Rules
-- Use the finding's \`heading_id\` as the Passage ID (individual paragraphs are \`<heading_id>.p<N>\`).
-- If the PDF page number, author or PDF URL is null/"not recorded", write that. Never infer it.
-- Mark **exact quotation** (copied) vs **paraphrase**. Do not put quotation marks around paraphrase.
-- Do not cite a finding as the original Arabic/Urdu text, or as a certified translation.
-- Cite the content version when the user may need to re-check later; findings can be corrected over time and the permalink always shows the latest text.
+Quote exactly or paraphrase and say so. Collection JSON format: ${site}/llms.txt (section ANSWER FORMAT).
 `;

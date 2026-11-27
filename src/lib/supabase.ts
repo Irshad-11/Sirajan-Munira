@@ -1,3 +1,4 @@
+import { bnWords, expandSynonyms, bnVariants } from './bn';
 import { createClient, type Session } from '@supabase/supabase-js';
 
 // ---------------------------------------------------------------------------
@@ -179,7 +180,14 @@ export async function getBookBySlug(slug: string): Promise<Book | null> {
     .eq('slug', slug)
     .maybeSingle();
   if (error) throw error;
-  return data as any;
+  if (data) return data as any;
+  // ASCII alias (book-xxxxxxxx = first 8 chars of the id) used for Bengali slugs in AI files.
+  const m = /^book-([0-9a-f]{8})$/.exec(slug);
+  if (m) {
+    const all = await listBooks({ includeHidden: false });
+    return all.find((b) => b.id.startsWith(m[1])) || null;
+  }
+  return null;
 }
 
 export async function createBook(book: Partial<Book>): Promise<Book> {
@@ -801,14 +809,19 @@ export async function listCategoryIdsForHeadings(headingIds: string[]): Promise<
 
 /** Full-text match inside one book (server side). Returns matching heading ids. */
 export async function findHeadingIdsInBook(bookId: string, query: string): Promise<string[]> {
-  const term = query.trim().replace(/[%_\\]/g, (m) => `\\${m}`);
-  if (!term) return [];
-  const { data, error } = await supabase
-    .from('headings')
-    .select('id')
-    .eq('book_id', bookId)
-    .ilike('search_text', `%${term}%`)
-    .limit(500);
+  // Whole-book search (not just the loaded batches): every word must match, each word
+  // matches any Bengali spelling variant or synonym.
+  const tokens = bnWords(query).slice(0, 8);
+  if (!tokens.length) return [];
+  const esc = (v: string) => v.replace(/[\\"%_]/g, (m) => (m === '"' ? '' : `\\${m}`));
+  let q = supabase.from('headings').select('id').eq('book_id', bookId);
+  for (const t of tokens) {
+    const terms = new Set<string>();
+    for (const syn of expandSynonyms(t)) for (const v of bnVariants(syn)) terms.add(v);
+    const list = [...terms].slice(0, 16).map((v) => `search_text.ilike."%${esc(v)}%"`);
+    q = q.or(list.join(','));
+  }
+  const { data, error } = await q.limit(500);
   if (error) throw error;
   return ((data as any[]) || []).map((r) => r.id);
 }

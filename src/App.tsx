@@ -1,5 +1,6 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { CollectionImport, MyCollectionsList, MyCollectionView } from './pages/MyCollections';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AdminProvider, PrefsProvider } from './lib/context';
 import { Layout } from './components/Layout';
 import Landing from './pages/Landing';
@@ -27,13 +28,17 @@ export default function App() {
               <Route path="/books" element={<Bookshelf />} />
               <Route path="/book/:slug" element={<BookPage />} />
               <Route path="/collections" element={<CollectionsList />} />
+              <Route path="/collections/import" element={<CollectionImport />} />
               <Route path="/collections/:id" element={<CategoryDetail />} />
+              <Route path="/my-collections" element={<MyCollectionsList />} />
+              <Route path="/my-collections/:id" element={<MyCollectionView />} />
               <Route path="/drafts" element={<Drafts />} />
               <Route path="/search" element={<SearchPage />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/bookmarks" element={<BookmarksPage />} />
+              <Route path="/guide" element={<Navigate to="/#guide" replace />} />
               <Route path="/ai-integration" element={<AiIntegrationPage />} />
               <Route path="/ai-integration/test" element={<AiTestPage />} />
               <Route path="*" element={<Landing />} />

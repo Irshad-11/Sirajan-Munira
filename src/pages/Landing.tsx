@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   BookOpen, FolderOpen, Bookmark, Search, ShieldCheck, Printer,
   Inbox as InboxIcon, ArrowRight, Star, Plus, Pencil, Trash2, X, ArrowUpRight,
   ScrollText, Archive, HardDrive, Library, Languages, Sparkles, UserRound, CalendarDays, Lightbulb, Compass,
   Link2, Hash, Code, Wrench, Feather, Mail, FileText, BookCopy, Send, ListChecks,
+  Bot, Copy, Check, Braces, AlertTriangle, Table2, GitCompare, ClipboardPaste, FileJson, Terminal, Cpu, Upload, Globe2, ScanSearch, Layers,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAdmin, useTrackView } from '../lib/context';
@@ -13,6 +14,9 @@ import { ContactForm } from './StaticPages';
 import { SearchBox } from '../components/SearchBox';
 import { CuratorNote } from '../components/Disclaimer';
 import { AuthorQuote } from '../components/AuthorQuote';
+import { copyToClipboard } from '../lib/richtext';
+import { siteOrigin } from '../lib/ai';
+import '../styles/hgai.css';
 
 // ---------------------------------------------------------------------------
 // Animated hero: lamp + book scene (artwork + GSAP timeline in
@@ -88,7 +92,7 @@ function QuoteManager({ quotes, onChange }: { quotes: ShelfQuote[]; onChange: (q
         {quotes.map(q => (
           <div key={q.id} className="quote-manager__item">
             <div className="quote-manager__item-text">"{q.text.slice(0, 80)}{q.text.length > 80 ? '…' : ''}"</div>
-            <div className="quote-manager__item-source muted">— {q.source}{q.url ? ` · 🔗 ${q.url}` : ''}</div>
+            <div className="quote-manager__item-source muted">— {q.source}{q.url ? ` · ${q.url}` : ''}</div>
             <div className="quote-manager__item-actions">
               <button onClick={() => startEdit(q)}><Pencil size={12}/> Edit</button>
               <button onClick={() => remove(q.id)} className="danger"><Trash2 size={12}/> Remove</button>
@@ -414,9 +418,204 @@ const GUIDE_STEPS: GuideStep[] = [
   },
 ];
 
+
+// ---------------------------------------------------------------------------
+// AI এজেন্ট সিস্টেম (new) — same tabbed/animated guide, own accent.
+// ---------------------------------------------------------------------------
+function CopyChip({ text, label, icon: Icon }: { text: string; label: string; icon?: LucideIcon }) {
+  const [ok, setOk] = useState(false);
+  return (
+    <div className="hgai-prompt">
+      <div className="hgai-prompt__head">
+        <span className="hgai-prompt__label">{Icon && <Icon size={15} aria-hidden="true" />} {label}</span>
+        <button type="button" onClick={async () => { if (await copyToClipboard(text)) { setOk(true); window.setTimeout(() => setOk(false), 1800); } }} aria-label={`${label} — সম্পূর্ণ প্রম্পট কপি করুন`}>
+          {ok ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />} {ok ? 'কপি হয়েছে' : 'কপি'}
+        </button>
+      </div>
+      <p className="hgai-prompt__text" title="সম্পূর্ণ প্রম্পট কপি হবে">{text}</p>
+    </div>
+  );
+}
+
+/** Prompt lab: the reader types a topic (and optionally a book); every prompt updates live. Previews are
+ *  clipped to two lines, the copy button always copies the full text. */
+function PromptLab() {
+  const [topic, setTopic] = useState('');
+  const [book, setBook] = useState('');
+  const [quote, setQuote] = useState('');
+  const t = topic.trim() || '[এখানে বিষয় লিখুন]';
+  const bk = book.trim() || '[বইয়ের নাম]';
+  const qt = quote.trim() || '[এখানে বাক্যটি পেস্ট করুন]';
+  const o = O();
+  return (
+    <>
+      <label className="hgai-field">
+        <span><ScanSearch size={14} aria-hidden="true" /> আপনার প্রশ্ন বা বিষয়</span>
+        <textarea rows={2} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="যেমন: আফজাল আমল" />
+      </label>
+      <label className="hgai-field">
+        <span><BookOpen size={14} aria-hidden="true" /> বইয়ের নাম (শুধু একটি বইয়ে খুঁজলে)</span>
+        <input value={book} onChange={(e) => setBook(e.target.value)} placeholder="বইয়ের নাম" />
+      </label>
+      <label className="hgai-field">
+        <span><Hash size={14} aria-hidden="true" /> যাচাই করতে চাওয়া বাক্য</span>
+        <textarea rows={2} value={quote} onChange={(e) => setQuote(e.target.value)} placeholder="বাক্যটি পেস্ট করুন" />
+      </label>
+      <CopyChip icon={Globe2} label="সব বইয়ে খুঁজুন" text={`আমার প্রশ্ন: ${t}. ${o}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। প্রতিটির ফুল permalink, বই, PDF পৃষ্ঠা ও শুরুর কথা দাও। শেষে বলো কতটি finding পড়েছ।`} />
+      <CopyChip icon={BookOpen} label="একটি বইয়ের ভেতরে" text={`${o}/llms.txt পড়ো। তারপর শুধু "${bk}" বইয়ের index.tsv ও part-ফাইলগুলো (শেষে END OF BOOK পর্যন্ত) পড়ে "${t}" সম্পর্কিত সব finding দাও, permalink ও PDF পৃষ্ঠা সহ।`} />
+      <CopyChip icon={FileJson} label="কালেকশন JSON" text={`আমার প্রশ্ন: ${t}. ${o}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি JSON ব্লকে দাও, schema 'sirajan-collection/1', প্রতিটি item-এ ফুল permalink, book, title, pdf_page, first_words (হুবহু), match, note থাকবে। শেষে এক লাইনে বলো কতটি finding পড়েছ কতটির মধ্যে।`} />
+      <CopyChip icon={ShieldCheck} label="উদ্ধৃতি যাচাই" text={`${o}/llms.txt পড়ো। নিচের বাক্যটি সাইটের কোন finding-এ আছে খুঁজে দাও (verify endpoint ব্যবহার করে)। পাওয়া গেলে permalink, বই, PDF পৃষ্ঠা দাও; না পেলে স্পষ্ট বলো "পাওয়া যায়নি"।\n\nবাক্য: ${qt}`} />
+    </>
+  );
+}
+
+/** Generic animated flow: nodes light up one after another (CSS only). */
+function VisualFlow({ nodes }: { nodes: { icon: LucideIcon; label: string }[] }) {
+  return (
+    <div className="hg-vis hgai-flow" aria-hidden="true">
+      {nodes.map((n, i) => (
+        <React.Fragment key={n.label}>
+          <div className="hgai-node" style={{ animationDelay: `${i * 0.7}s` }}>
+            <span className="hgai-node__ic"><n.icon size={18} /></span>
+            <span className="hgai-node__tx">{n.label}</span>
+          </div>
+          {i < nodes.length - 1 && <span className="hgai-edge" style={{ animationDelay: `${i * 0.7 + 0.35}s` }} />}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+const O = () => siteOrigin();
+const Scene = ({ children }: { children: React.ReactNode }) => <div className="hgai-sw" aria-hidden="true">{children}</div>;
+const v = (o: Record<string, string | number>) => o as React.CSSProperties;
+const Ic = ({ I, c = '', s }: { I: LucideIcon; c?: string; s?: React.CSSProperties }) => <span className={`hgai-i ${c}`} style={s}><I size={16} /></span>;
+// 1 ORBIT: the five ways to use AI circle one assistant
+const S1 = () => (<Scene><div className="hgai-s hgai-s1" aria-hidden="true">
+  <svg viewBox="0 0 360 170"><circle cx="180" cy="85" r="62" /><circle cx="180" cy="85" r="34" /></svg>
+  <Ic I={Bot} c="hgai-s1__c" />
+  <div className="hgai-s1__ring">{[Globe2, Upload, Layers, Terminal, Cpu].map((I, i) => <Ic key={i} I={I} s={v({ '--a': `${i * 72}deg`, '--d': `${i * 3.6}s` })} />)}</div>
+</div></Scene>);
+// 2 TYPEWRITER: prompt types out -> copy -> packet flies -> chat reply
+const S2 = () => (<Scene><div className="hgai-s hgai-s2" aria-hidden="true">
+  <div className="hgai-s2__card">{[100, 82, 94, 56].map((w, i) => <i key={i} style={v({ '--w': `${w}%`, '--n': i })} />)}</div>
+  <Ic I={Copy} c="hgai-s2__cp" /><b className="hgai-s2__pk" />
+  <div className="hgai-s2__chat"><u className="me" /><u className="ai"><em /><em /><em /></u><u className="ln" /></div>
+</div></Scene>);
+// 3 CONVEYOR: JSON blocks ride a belt, pass the scanner gate, become Verified/Check badges, drop into folder
+const S3 = () => (<Scene><div className="hgai-s hgai-s3" aria-hidden="true">
+  <svg viewBox="0 0 360 170"><rect className="belt" x="0" y="122" width="360" height="6" rx="3" /><path className="gate" d="M150 122V50h40v72" /><rect className="beam" x="156" y="56" width="28" height="3" rx="1.5" /></svg>
+  <Ic I={ScanSearch} c="hgai-s3__sc" />
+  {[0, 1, 2].map(i => <span key={i} className={`hgai-s3__c${i === 2 ? ' warn' : ''}`} style={v({ '--i': i })}>
+    <Braces className="a" size={18} />{i === 2 ? <AlertTriangle className="b" size={18} /> : <Check className="b" size={18} />}</span>)}
+  <Ic I={FolderOpen} c="hgai-s3__f" />
+</div></Scene>);
+// 4 RADAR: a sweep over the collection pings findings; results light up on the right
+const S4 = () => (<Scene><div className="hgai-s hgai-s4" aria-hidden="true">
+  <div className="hgai-s4__r"><i className="sw" />{[[40, 22], [104, 36], [92, 100], [30, 88]].map(([x, y], i) => <b key={i} style={v({ left: x, top: y, '--d': `${[0.9, 1.5, 3, 4.1][i]}s` })} />)}</div>
+  <Ic I={FolderOpen} c="hgai-s4__c" />
+  {[Table2, GitCompare, FileText].map((I, i) => <Ic key={i} I={I} s={v({ top: 22 + i * 46, '--d': `${1.4 + i * 1.3}s` })} c="hgai-s4__o" />)}
+</div></Scene>);
+// 5 STACK: a reader walks down the file layers: llms.txt > index.tsv > part-N > END OF BOOK
+const S5 = () => (<Scene><div className="hgai-s hgai-s5" aria-hidden="true">
+  {[[FileText, 'llms.txt'], [ListChecks, 'index.tsv'], [BookOpen, 'part-1'], [BookOpen, 'part-N'], [Check, 'END OF BOOK']].map(([I, t], i) =>
+    <div key={i} className="hgai-s5__r" style={v({ '--i': i })}><I size={14} /><span>{t as string}</span></div>)}
+  <i className="hgai-s5__beam" /><Ic I={Bot} c="hgai-s5__bot" />
+</div></Scene>);
+
+const P_JSON = () => `আমার প্রশ্ন: [এখানে প্রশ্ন]. ${O()}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি JSON ব্লকে দাও, schema 'sirajan-collection/1', প্রতিটি item-এ ফুল permalink, book, title, pdf_page, first_words (হুবহু), match, note থাকবে। শেষে এক লাইনে বলো কতটি finding পড়েছ কতটির মধ্যে।`;
+
+const AI_STEPS: GuideStep[] = [
+  {
+    id: 'ai-ways', icon: Bot, tab: 'AI কীভাবে ব্যবহার করবেন', hint: '৫ ধরনের AI, ৫ রকম উপায়',
+    title: 'আপনার AI যেটাই হোক, ব্যবহারের উপায় আছে',
+    body: (
+      <>
+        <p>এই সাইট AI-এর জন্য সরল টেক্সট ফাইল দেয়, তাই নিচের যেকোনো ধরনের AI দিয়েই কাজ করা যায়:</p>
+        <ul className="hgai-list">
+          <li><Globe2 size={15} aria-hidden="true" /><span><b>ব্রাউজিং আছে</b> (ChatGPT, Claude, Gemini-এর web সার্চ): নিচের প্রম্পট কপি করে পেস্ট করুন। AI নিজেই <code>llms.txt</code> থেকে শুরু করে বই খুঁজে নেবে।</span></li>
+          <li><Upload size={15} aria-hidden="true" /><span><b>ব্রাউজিং নেই:</b> বইয়ের পাতা বা কালেকশন থেকে TXT/JSON ডাউনলোড করে AI-তে আপলোড করুন, তারপর প্রশ্ন করুন।</span></li>
+          <li><Layers size={15} aria-hidden="true" /><span><b>Projects / Custom GPT / Gems / NotebookLM:</b> <code>SKILL.md</code> ও বইয়ের ফাইল একবার যোগ করুন, তারপর বারবার ব্যবহার করুন।</span></li>
+          <li><Terminal size={15} aria-hidden="true" /><span><b>কোডিং এজেন্ট</b> (Claude Code, Codex ইত্যাদি): <code>openapi.json</code> ও <code>index.tsv</code> দিন; এরা search, verify ও part-ফাইল নিজেই চালাতে পারে।</span></li>
+          <li><Cpu size={15} aria-hidden="true" /><span><b>লোকাল মডেল:</b> ছোট কনটেক্সট, তাই কালেকশন থেকে "Copy as AI context" নিন এবং একসাথে ২০–৩০টির বেশি finding দেবেন না।</span></li>
+        </ul>
+      </>
+    ),
+    cta: { to: '/ai-integration', label: 'পূর্ণ AI Integration গাইড' },
+    Visual: S1,
+  },
+  {
+    id: 'ai-prompts', icon: Copy, tab: 'রেডি প্রম্পট', hint: 'কপি করে সরাসরি পেস্ট',
+    title: 'প্রম্পট কপি করুন, AI-তে পেস্ট করুন',
+    body: (
+      <>
+        <p>নিচে আপনার প্রশ্ন লিখুন, প্রম্পটগুলো নিজে থেকেই বদলে যাবে। প্রিভিউ ছোট করে দেখানো হয়েছে; <strong>কপি</strong> চাপলে পুরো প্রম্পট কপি হবে।</p>
+        <PromptLab />
+      </>
+    ),
+    cta: { to: '/search', label: 'Search with High Accuracy' },
+    Visual: S2,
+  },
+  {
+    id: 'ai-collect', icon: FileJson, tab: 'কালেকশন বানানো', hint: 'AI-এর JSON সাইটে যাচাই',
+    title: 'AI-এর উত্তর থেকে নিজের কালেকশন',
+    body: (
+      <>
+        <p>AI যা খুঁজে পায় তা JSON আকারে দিতে বলুন, তারপর <Link to="/collections/import">Import collection</Link> পাতায় পেস্ট করুন। সাইট প্রতিটি item আসল ডাটাবেসের সঙ্গে মিলিয়ে <strong>Verified</strong> অথবা <strong>Check</strong> চিহ্ন দেখাবে, ভুল হলে "AI বলেছে / সাইটে আছে" পাশাপাশি দেখাবে।</p>
+        <CopyChip label="কালেকশন JSON প্রম্পট" text={P_JSON()} />
+        <p>সেভ করার জায়গা: <strong>Temporary</strong> (এই ট্যাবে), <strong>Local</strong> (এই ডিভাইসে, Export করে ব্যাকআপ রাখা যায়)। সেভ করা কালেকশন <Link to="/my-collections">My collections</Link>-এ।</p>
+      </>
+    ),
+    cta: { to: '/collections/import', label: 'Import collection', primary: true },
+    Visual: S3,
+  },
+  {
+    id: 'ai-analyze', icon: Sparkles, tab: 'AI দিয়ে বিশ্লেষণ', hint: 'সারাংশ, তুলনা, প্রবন্ধ',
+    title: 'কালেকশন দিয়ে AI-কে দিয়ে কাজ করান',
+    body: (
+      <>
+        <p>কালেকশন পাতায় <strong>Copy as AI context</strong> চেপে AI-তে পেস্ট করুন, তারপর নিচের যেকোনো কাজ বলুন:</p>
+        <ul className="hgai-list hgai-list--plain">
+          <li>উপ-বিষয় অনুযায়ী findings ভাগ করা</li>
+          <li>বই-বই তুলনা, মিল ও অমিল টেবিলে</li>
+          <li>টাইমলাইন বা টেবিল: বই, পৃষ্ঠা, সারাংশ, লিংক</li>
+          <li>কীওয়ার্ড ও সমার্থক শব্দ বের করা (যেমন আফজাল, শ্রেষ্ঠ, সর্বোত্তম)</li>
+          <li>প্রতিটি finding-এর ২ লাইনের সারাংশ</li>
+          <li>পড়ার প্রশ্ন ও কুইজ, উত্তরের পাশে permalink</li>
+          <li>permalink-সহ প্রবন্ধের খসড়া</li>
+          <li>ফাঁক খোঁজা: কোন দিক বাদ পড়েছে</li>
+          <li>উত্তরের উদ্ধৃতি verify দিয়ে আবার যাচাই</li>
+        </ul>
+        <p className="hgai-note">কাজের ধারা: প্রশ্ন করুন, JSON নিন, পেস্ট করে Verified দেখুন, ভুল বাদ দিন, সেভ করুন, তারপর "Copy as AI context" দিয়ে ফলো-আপ প্রশ্ন করুন।</p>
+      </>
+    ),
+    cta: { to: '/my-collections', label: 'My collections' },
+    Visual: S4,
+  },
+  {
+    id: 'ai-files', icon: Terminal, tab: 'ফাইল ও এন্ডপয়েন্ট', hint: 'এজেন্টদের জন্য কাঁচা লিংক',
+    title: 'AI এজেন্টের জন্য প্রস্তুত ফাইল',
+    body: (
+      <>
+        <p>সবই সরল টেক্সট, JavaScript লাগে না:</p>
+        <ul className="hgai-links">
+          <li><a href="/llms.txt">llms.txt</a><span>শুরুর নির্দেশ ও উত্তরের ফরম্যাট</span></li>
+          <li><a href="/ai-integration/SKILL.md">SKILL.md</a><span>এজেন্টের স্থায়ী নিয়ম</span></li>
+          <li><a href="/index.tsv">index.tsv</a><span>সব বই ও finding-এর তালিকা</span></li>
+          <li><a href="/openapi.json">openapi.json</a><span>search ও verify API</span></li>
+          <li><a href="/synonyms.txt">synonyms.txt</a><span>সমার্থক শব্দের তালিকা</span></li>
+        </ul>
+        <p>প্রতিটি বইয়ের টেক্সট ছোট ছোট part-এ ভাগ করা; শেষে <code>NEXT</code> লিংক বা <code>END OF BOOK</code> থাকে, তাই এজেন্ট জানে কখন পুরো বই পড়া হয়েছে।</p>
+      </>
+    ),
+    cta: { to: '/ai-integration', label: 'AI Integration গাইড দেখুন' },
+    Visual: S5,
+  },
+];
+
 const GUIDE_INTERVAL = 7000;
 
-function ReaderGuide() {
+function ReaderGuide({ steps = GUIDE_STEPS, label = 'সাইটটি কীভাবে ব্যবহার করবেন', variant = '' }: { steps?: GuideStep[]; label?: string; variant?: string }) {
   const [active, setActive] = useState(0);
   const [auto, setAuto] = useState(true);       // false forever once the reader picks a tab
   const [paused, setPaused] = useState(false);  // hover / focus / off-screen
@@ -439,7 +638,7 @@ function ReaderGuide() {
   const running = auto && !paused && onScreen;
   useEffect(() => {
     if (!running) return;
-    const t = window.setTimeout(() => setActive((a) => (a + 1) % GUIDE_STEPS.length), GUIDE_INTERVAL);
+    const t = window.setTimeout(() => setActive((a) => (a + 1) % steps.length), GUIDE_INTERVAL);
     return () => window.clearTimeout(t);
   }, [running, active]);
 
@@ -449,27 +648,27 @@ function ReaderGuide() {
     if (focus) tabRefs.current[i]?.focus();
   };
   const onKey = (e: React.KeyboardEvent) => {
-    const n = GUIDE_STEPS.length;
+    const n = steps.length;
     if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); pick((active + 1) % n, true); }
     if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); pick((active - 1 + n) % n, true); }
     if (e.key === 'Home') { e.preventDefault(); pick(0, true); }
     if (e.key === 'End') { e.preventDefault(); pick(n - 1, true); }
   };
 
-  const step = GUIDE_STEPS[active];
+  const step = steps[active];
   const Visual = step.Visual;
 
   return (
     <div
       ref={rootRef}
-      className={`hg ${running ? 'hg--running' : ''}`}
+      className={`hg ${variant} ${running ? 'hg--running' : ''}`}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={() => setPaused(false)}
     >
-      <div className="hg-tabs" role="tablist" aria-label="সাইটটি কীভাবে ব্যবহার করবেন" aria-orientation="vertical" onKeyDown={onKey}>
-        {GUIDE_STEPS.map((s, i) => (
+      <div className="hg-tabs" role="tablist" aria-label={label} aria-orientation="vertical" onKeyDown={onKey}>
+        {steps.map((s, i) => (
           <button
             key={s.id}
             ref={(el) => { tabRefs.current[i] = el; }}
@@ -572,9 +771,9 @@ function useReveal<T extends HTMLElement>() {
   }, []);
   return { ref, visible };
 }
-function RevealSection({ className, style, children }: { className?: string; style?: React.CSSProperties; children: React.ReactNode }) {
+function RevealSection({ id, className, style, children }: { id?: string; className?: string; style?: React.CSSProperties; children: React.ReactNode }) {
   const { ref, visible } = useReveal<HTMLElement>();
-  return <section ref={ref as any} className={`reveal ${visible ? 'reveal-in' : ''} ${className || ''}`} style={style}>{children}</section>;
+  return <section id={id} ref={ref as any} className={`reveal ${visible ? 'reveal-in' : ''} ${className || ''}`} style={style}>{children}</section>;
 }
 
 // ---------------------------------------------------------------------------
@@ -617,6 +816,12 @@ export default function Landing() {
   const [showQuoteManager, setShowQuoteManager] = useState(false);
   const navigate = useNavigate();
   useTrackView('site', 'landing');
+  const loc = useLocation();
+  useEffect(() => {
+    if (!loc.hash) return;
+    const t = window.setTimeout(() => document.getElementById(loc.hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 700);
+    return () => window.clearTimeout(t);
+  }, [loc.hash]);
 
   useEffect(() => {
     getLiveStats().then(setStats).catch(() => setStats({ books: 0, categories: 0, visitors: 0 }));
@@ -662,7 +867,7 @@ export default function Landing() {
       <div className="landing-body">
 
         {/* How to use this site + purpose & disclaimer */}
-        <RevealSection className="landing-section hg-section bn">
+        <RevealSection id="guide" className="landing-section hg-section bn">
           <p className="hg-eyebrow">পাঠকের গাইড</p>
           <h2 className="hg-heading">এই সাইট আপনি ব্যবহার করবেন যেভাবে</h2>
           <p className="hg-intro">
@@ -671,6 +876,16 @@ export default function Landing() {
           </p>
           <ReaderGuide />
           <div className="hg-note"><CuratorNote /></div>
+        </RevealSection>
+
+        {/* AI agent system (new) */}
+        <RevealSection id="ai-agents" className="landing-section hg-section hgai-section bn">
+          <p className="hg-eyebrow hgai-eyebrow"><Bot size={13} aria-hidden="true" /> AI এজেন্ট সিস্টেম <em className="hgai-new">নতুন</em></p>
+          <h2 className="hg-heading">AI দিয়ে খুঁজুন, যাচাই করুন, বিশ্লেষণ করুন</h2>
+          <p className="hg-intro">
+            ChatGPT, Claude, Gemini বা যেকোনো AI এজেন্ট এখন সরাসরি এই আর্কাইভ পড়তে পারে। কোন ধরনের AI কীভাবে ব্যবহার করবেন, রেডি প্রম্পট, কালেকশন বানানো আর বিশ্লেষণের ধাপ নিচে দেখুন।
+          </p>
+          <ReaderGuide steps={AI_STEPS} label="AI এজেন্ট কীভাবে ব্যবহার করবেন" variant="hgai" />
         </RevealSection>
 
         {/* Newest books */}

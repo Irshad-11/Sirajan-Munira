@@ -82,7 +82,7 @@ function PromptStudio({ books, cats }: { books: Book[]; cats: Category[] }) {
         ) : <p className="muted">No public collections yet.</p>)}
         {mode !== 'general' && (
           <label className="aii-field">{mode === 'search' ? 'Search query / question' : 'Your question'} <span className="muted">(leave empty to keep the placeholder and type it in the AI chat)</span>
-            <textarea rows={2} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Write in Bangla or English" />
+            <textarea rows={2} value={q} onChange={(e) => setQ(e.target.value)} placeholder="বাংলা বা English" />
           </label>
         )}
         <pre className="aii-prompt" tabIndex={0} aria-label="Generated prompt">{prompt}</pre>
@@ -164,7 +164,7 @@ export default function AiIntegrationPage() {
             <ol>
               <li>Paste a prompt from step 1 into a new chat (Gemini opens links in your prompt itself).</li>
               <li><b>Permanent:</b> create a <i>Gem</i> and paste the “Set up assistant” prompt as its instructions.</li>
-              <li>For very long books, ask it to read the TXT in parts using the <code>CONTINUE WITH</code> link.</li>
+              <li>For very long books, ask it to read the TXT in parts following each <code>NEXT</code> link until <code>END OF BOOK</code>.</li>
             </ol>
           </article>
           <article className="aii-card">
@@ -183,7 +183,7 @@ export default function AiIntegrationPage() {
         <ol className="aii-flow">
           <li><b>Discover</b><span><a href={g.llms}>llms.txt</a> lists every book, topic collection and its TXT / JSON / download URLs.</span></li>
           <li><b>Learn the rules</b><span><a href={g.skill}>SKILL.md</a> explains the content model, search types, citation and verification.</span></li>
-          <li><b>Read</b><span><code>/book/&lt;slug&gt;.txt</code> or <code>.json</code> — complete Bengali findings, no JavaScript. Long books split with a <code>CONTINUE WITH</code> link.</span></li>
+          <li><b>Read</b><span><code>/book/&lt;slug&gt;.txt</code> or <code>.json</code> — complete Bengali findings, no JavaScript. Long books split into parts, each ending with a <code>NEXT</code> link (or <code>END OF BOOK</code>).</span></li>
           <li><b>Search</b><span><a href={g.search}>search API</a>: exact phrase, keyword, semantic — across all books at once, so the number of books doesn’t matter.</span></li>
           <li><b>Cite &amp; verify</b><span>Heading ID, original PDF page and permalink for every claim (<a href={g.citation}>citation rules</a>); <code>/ai-integration/verify</code> checks a quotation.</span></li>
         </ol>
@@ -193,7 +193,7 @@ export default function AiIntegrationPage() {
         <Info size={18} aria-hidden="true" />
         <div>
           <h3>Findings are not the original book</h3>
-          <p>This site does not publish the original Arabic or Urdu text. Each <b>finding</b> is a Bengali research statement written from the original book’s PDF, with the PDF page number attached. An AI must never present a finding as the original text or a certified translation, must say when it paraphrases, and must say when it couldn’t read everything.</p>
+          <p>This site does not publish the original Arabic or Urdu text. Each <b>finding</b> is a Bengali research statement written from the original book’s PDF, with the PDF page number attached. A good AI answer cites the permalink and PDF page, separates quotes from its own summary, and says how much it actually read.</p>
         </div>
       </aside>
 
