@@ -30,3 +30,9 @@ Format: **Chosen** / Rejected / Why. (Options were compared by an independent re
 - More menu: AI Integration + llms.txt (+ admin tester). Footer back to original links. No nav entries for guide / AI system (the landing page has them).
 - Removed the per-heading Cite button; the Add menu is temp/local only (admins already have the existing "Collection" button for site collections).
 - Removed left accent borders (help panel, notes, question box, test rows, selected item).
+
+## Round: links-only import
+- Import JSON is now `{"name": "...", "links": ["permalink", ...]}`; everything else comes from the database. Old formats (items/id/url) still parse. Export writes the same small shape.
+- "Copy as AI context" removed (button, landing copy). llms.txt / SKILL.md / prompts tell AI to return only name + links.
+- Collection side panel widened (up to ~52% of the page). Admins can save the imported collection as a site collection (import page, or "Save to site" on a local collection).
+- Splash shows version v07.26.34 at the bottom.

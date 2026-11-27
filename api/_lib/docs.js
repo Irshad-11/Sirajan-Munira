@@ -11,7 +11,7 @@ export function answerFormat(site, ex = []) {
 4. No generic disclaimers, no filler. Exception: if your reading was incomplete, add ONE short line saying how many findings you actually read out of the total.
 5. Internally classify each hit as exact / keyword / semantic. Never present a semantic-only hit as an exact quote.
 6. Search strategy: read ${site}/index.tsv first (then the book keyword files), try several Bengali phrasings and synonyms (${site}/synonyms.txt), open only the findings you need to confirm context, collect ALL relevant findings across ALL books, order them by relevance.
-7. If the user asks for JSON / a collection export, output exactly ONE JSON object in schema "sirajan-collection/1" (see below) and nothing around it except the one-line "read X of Y" statement.
+7. If the user asks for JSON / a collection export, output exactly ONE small JSON object: a "name" and a "links" list of the real permalinks (see below). No titles, no first words, no notes, no extra fields: the site reads every finding from its own database and shows it like any other collection.
 8. Never alter quoted text: quote exactly, or paraphrase and label it as a paraphrase.
 
 ### Example 1 — prose answer
@@ -24,12 +24,12 @@ Original PDF of ${a?.book ?? 'the book'}: <the book's PDF link from index.tsv>.
 (I read 2 of 2 candidate findings found through the index.)
 
 ### Example 2 — JSON answer (only when the user asks for JSON / a collection)
-{"schema":"sirajan-collection/1","name":${JSON.stringify((a?.title ?? 'Topic').slice(0, 40))},"query":${JSON.stringify(`Which findings cover ${a?.title ?? 'this topic'}?`)},"items":[{"url":"${a?.link ?? `${site}/book/<book-slug>#<heading-id>`}","book":"${a?.slug ?? '<book-slug>'}","title":${JSON.stringify(a?.title ?? '<title>')},"pdf_page":"${a?.page ?? 'not recorded'}","first_words":${JSON.stringify((a?.words ?? '<first words>').replace(/ …$/, ''))},"match":"exact","note":"one-line reason"}]}
+{"name":${JSON.stringify((a?.title ?? 'Topic').slice(0, 40))},"links":["${a?.link ?? `${site}/book/<book-slug>#<heading-id>`}","${b?.link ?? `${site}/book/<book-slug>#<heading-id>`}"]}
 Read 2 of 2 findings.
 
-### Collection JSON schema "sirajan-collection/1"
-{"schema":"sirajan-collection/1","name":"...","description":"optional","query":"user's question","items":[{"url":"full permalink (or \\"id\\": heading UUID)","book":"book slug","title":"finding heading","pdf_page":"41 | 36-37 | not recorded","first_words":"exact first words","match":"exact|keyword|semantic","relevance":1,"note":"one-line reason"}]}
-Only "url" or "id" is required per item. Use the real permalinks. The site checks every item against its database.`;
+### Collection JSON format
+{"name":"short collection name","links":["full permalink 1","full permalink 2"]}
+Only the name and the links. Copy every link exactly as it appears in the site data (the part after # is the finding id); never build or shorten one. Bengali words in any search URL you call must be UTF-8 percent-encoded. The site checks every link against its database.`;
 }
 
 export function tiers(site) {

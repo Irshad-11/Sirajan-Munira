@@ -5,7 +5,7 @@ import { useAdmin } from '../lib/context';
 import { copyToClipboard } from '../lib/richtext';
 import { addHeadingToCategory, createCategory, listCategories, listCategoryHeadings, Category } from '../lib/supabase';
 import {
-  ResolvedItem, StoredCollection, StoredItem, LiveFinding, SCHEMA, TEMP_ID, aiContext, deleteLocal, exportJson, exportLocalStore,
+  ResolvedItem, StoredCollection, StoredItem, LiveFinding, SCHEMA, TEMP_ID, deleteLocal, exportJson, exportLocalStore,
   fetchLive, getStored, getTemp, importLocalStore, isUsable, itemsFromResolved, listLocal, makeCollection, mergeItems,
   parseCollectionJson, permalinkFor, resolveItems, saveCollection, ParseResult,
 } from '../lib/collections';
@@ -14,7 +14,7 @@ import '../styles/coll.css';
 
 const SITE = 'https://sirajan-munira.vercel.app';
 export const COLLECTION_PROMPT = (q: string) =>
-  `আমার প্রশ্ন: ${q}. ${SITE}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি JSON ব্লকে দাও, schema '${SCHEMA}'। প্রতিটি item-এ থাকবে: "url" (ফুল permalink, শেষে #finding-id সহ), "book", "title", "pdf_page", "first_words" (হুবহু), "match", "note"। ID বা লিংক নিজে বানাবে না, শুধু সাইটে দেখা permalink কপি করবে। search URL-এ বাংলা query অবশ্যই UTF-8 percent-encoded করবে। শেষে এক লাইনে বলো কতটি finding পড়েছ কতটির মধ্যে।`;
+  `আমার প্রশ্ন: ${q}. ${SITE}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি ছোট JSON ব্লকে দাও: {"name": "কালেকশনের নাম", "links": ["permalink 1", "permalink 2"]}। শুধু নাম আর লিংক, আর কিছু না। লিংক নিজে বানাবে না, সাইটে দেখা permalink হুবহু কপি করবে (শেষে #finding-id সহ)। search URL-এ বাংলা query অবশ্যই UTF-8 percent-encoded করবে।`;
 
 function download(name: string, text: string, mime = 'application/json') {
   const a = document.createElement('a');
@@ -203,7 +203,7 @@ export function CollectionImport() {
   return (
     <div className="co-wrap">
       <h1 className="co-h1">Import collection · কালেকশন ইম্পোর্ট</h1>
-      <p className="co-sub">AI-এর দেওয়া <code>{SCHEMA}</code> JSON এখানে পেস্ট করুন। সাইটের ডাটাবেসই সত্য — AI-এর লেখা যাচাই করে দেখানো হবে।</p>
+      <p className="co-sub">AI-এর দেওয়া নাম ও লিংকের JSON এখানে পেস্ট করুন। বাকি সব তথ্য সাইটের ডাটাবেস থেকে আসবে।</p>
 
       <section className="co-card">
         <h2>১. AI-কে প্রশ্ন করুন · Ask your AI</h2>

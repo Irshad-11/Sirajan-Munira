@@ -7,12 +7,12 @@ import {
 } from 'lucide-react';
 import {
   Category, CategoryHeadingDetail, CategoryStats, createCategory, deleteCategory, getCategory,
-  getCategoryStatsMany, listCategoriesPage, listCategoryItemsPage, requestIndexing, updateCategory, uploadImage,
+  addHeadingToCategory, getCategoryStatsMany, listCategoriesPage, listCategoryItemsPage, requestIndexing, updateCategory, uploadImage,
 } from '../lib/supabase';
 import { useAdmin, useTrackView } from '../lib/context';
 import { RichTextView, docToPlainText, copyToClipboard } from '../lib/richtext';
 import {
-  StoredCollection, TEMP_ID, aiContext, deleteLocal, exportJson, exportLocalStore, fetchLocalDetails, fetchLive, getStored, getTemp,
+  StoredCollection, TEMP_ID, deleteLocal, exportJson, exportLocalStore, fetchLocalDetails, fetchLive, getStored, getTemp,
   importLocalStore, listLocal, makeCollection, permalinkFor, saveCollection,
 } from '../lib/collections';
 import { bnFuzzy } from '../lib/bn';
@@ -569,8 +569,12 @@ export function CategoryDetail() {
               <div className="cd-tools">
                 <button className="link-btn icon-row" onClick={async () => say((await liveRows()).filter((r) => r.live).map((r) => permalinkFor(r.live!.bookSlug, r.live!.id)).join('\n'), 'Links copied')}><Copy size={13} aria-hidden="true" /> Copy links</button>
                 <button className="link-btn icon-row" onClick={async () => stored && downloadText((stored.name || 'collection').replace(/[^\wঀ-৿-]+/g, '_') + '.json', exportJson(stored, await liveRows()))}><Download size={13} aria-hidden="true" /> Export JSON</button>
-                <button className="link-btn icon-row" onClick={async () => stored && say(aiContext(stored, await liveRows()), 'Copied — paste it into your AI')}>Copy as AI context</button>
                 {id === TEMP_ID && <button className="link-btn icon-row" onClick={() => { if (!stored) return; const n = { ...stored, id: makeCollection({ name: stored.name }, []).id }; saveCollection(n, 'local'); navigate('/my-collections/' + n.id, { replace: true }); }}>Save to this device</button>}
+                {isAdmin && <button className="link-btn icon-row" onClick={async () => {
+                  if (!stored || !confirm(`Save "${stored.name}" as a site collection? It will be visible to everyone.`)) return;
+                  try { const c = await createCategory({ name: stored.name }); for (const it of stored.items) if (items.some((r) => r.heading.id === it.id)) await addHeadingToCategory(c.id, it.id); navigate('/collections/' + c.id); }
+                  catch (e) { setToast('Failed: ' + (e as Error).message); }
+                }}>Save to site</button>}
                 {id !== TEMP_ID && <button className="link-btn icon-row" onClick={() => { if (confirm(`Delete "${stored?.name}" from this device?`)) { deleteLocal(id!); navigate('/collections'); } }}><Trash2 size={13} aria-hidden="true" /> Delete</button>}
               </div>
             ) : (
@@ -594,7 +598,7 @@ export function CategoryDetail() {
         )}
       </header>
 
-      <div className={`split-view ${selected ? 'has-detail' : ''}`}>
+      <div className={`split-view ${selected ? 'has-detail wide-detail' : ''}`}>
         <div className="split-list">
           {state === 'error' && items.length === 0 ? (
             <div className="state-block error" role="alert"><h3>Couldn't load the findings</h3>
@@ -774,6 +778,8 @@ a.cl-row-link:hover .cl-row-title { color: var(--accent); }
 .cd-kicker { margin: 0.7rem 0 0; display: flex; width: fit-content; align-items: center; gap: 0.3rem; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); }
 .cd-title { margin: 0.2rem 0 0.5rem; font-size: 1.6rem; font-weight: 800; line-height: 1.25; word-break: break-word; }
 .cd-howto { margin: 0.55rem 0 0; font-size: 0.8rem; }
+.collection-detail-page .split-view.has-detail { grid-template-columns: minmax(0, 1fr) minmax(380px, 52%); }
+@media (max-width: 900px) { .collection-detail-page .split-view.has-detail { display: block; } }
 .cl-head-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .cd-tools { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; margin: 0.6rem 0 0; font-size: 0.82rem; }
 .cd-tools .link-btn { display: inline-flex; align-items: center; gap: 0.3rem; }

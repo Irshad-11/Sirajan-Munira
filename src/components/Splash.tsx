@@ -80,11 +80,13 @@ export function Splash() {
           <span className="sm-splash__underline" aria-hidden="true" />
         </div>
       </div>
+      <p className="sm-splash__ver">v07.26.34</p>
     </div>
   );
 }
 
 const SPLASH_CSS = `
+.sm-splash__ver { position:absolute; left:0; right:0; bottom:max(14px, env(safe-area-inset-bottom)); margin:0; text-align:center; font:500 12px/1 ui-monospace, Menlo, monospace; letter-spacing:.08em; color:#8a8a8a; }
 .sm-splash { position:fixed; inset:0; z-index:100000; background:#fff; color:#1b1b1b;
   display:grid; place-items:center; transition:opacity .55s ease, transform .55s ease; }
 .sm-splash--out { opacity:0; transform:scale(1.015); pointer-events:none; }

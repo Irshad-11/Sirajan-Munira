@@ -464,7 +464,7 @@ function PromptLab() {
       </label>
       <CopyChip icon={Globe2} label="সব বইয়ে খুঁজুন" text={`আমার প্রশ্ন: ${t}. ${o}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো।${enc ? ` প্রথমে এই তৈরি-করা search লিংকটা খোলো (বাংলা আগেই encode করা): ${enc} — উত্তরে next_offset থাকলে &offset=<সেই সংখ্যা> যোগ করে বাকি পাতাও পড়ো।` : ''} প্রতিটির ফুল permalink, বই, PDF পৃষ্ঠা ও শুরুর কথা দাও। শেষে বলো কতটি finding পড়েছ।`} />
       <CopyChip icon={BookOpen} label="একটি বইয়ের ভেতরে" text={`${o}/llms.txt পড়ো। তারপর শুধু "${bk}" বইয়ের index.tsv ও part-ফাইলগুলো (শেষে END OF BOOK পর্যন্ত) পড়ে "${t}" সম্পর্কিত সব finding দাও, permalink ও PDF পৃষ্ঠা সহ।`} />
-      <CopyChip icon={FileJson} label="কালেকশন JSON" text={`আমার প্রশ্ন: ${t}. ${o}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি JSON ব্লকে দাও, schema 'sirajan-collection/1', প্রতিটি item-এ ফুল permalink, book, title, pdf_page, first_words (হুবহু), match, note থাকবে। শেষে এক লাইনে বলো কতটি finding পড়েছ কতটির মধ্যে।`} />
+      <CopyChip icon={FileJson} label="কালেকশন JSON" text={`আমার প্রশ্ন: ${t}. ${o}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি ছোট JSON ব্লকে দাও: {"name": "কালেকশনের নাম", "links": ["permalink"]}। শুধু নাম আর হুবহু permalink, আর কিছু না।`} />
       <CopyChip icon={ShieldCheck} label="উদ্ধৃতি যাচাই" text={`${o}/llms.txt পড়ো। নিচের বাক্যটি সাইটের কোন finding-এ আছে খুঁজে দাও (verify endpoint ব্যবহার করে)। পাওয়া গেলে permalink, বই, PDF পৃষ্ঠা দাও; না পেলে স্পষ্ট বলো "পাওয়া যায়নি"।\n\nবাক্য: ${qt}`} />
     </>
   );
@@ -493,7 +493,7 @@ const v = (o: Record<string, string | number>) => o as React.CSSProperties;
 const Ic = ({ I, c = '', s }: { I: LucideIcon; c?: string; s?: React.CSSProperties }) => <span className={`hgai-i ${c}`} style={s}><I size={16} /></span>;
 // 1 CHOOSE: what to hand to each kind of AI
 const S1 = () => (<Scene><div className="hgai-s hgai-s1">
-  {([[Globe2, 'ব্রাউজিং AI', 'লিংক'], [Upload, 'ফাইল আপলোড', 'TXT / JSON'], [Layers, 'Project / GPT', 'SKILL.md'], [Terminal, 'কোডিং এজেন্ট', 'openapi.json'], [Cpu, 'লোকাল মডেল', 'AI context']] as [LucideIcon, string, string][]).map(([I, t, g], i) =>
+  {([[Globe2, 'ব্রাউজিং AI', 'লিংক'], [Upload, 'ফাইল আপলোড', 'TXT / JSON'], [Layers, 'Project / GPT', 'SKILL.md'], [Terminal, 'কোডিং এজেন্ট', 'openapi.json'], [Cpu, 'লোকাল মডেল', 'লিংক তালিকা']] as [LucideIcon, string, string][]).map(([I, t, g], i) =>
     <div key={t} className="hgai-s1__r" style={v({ '--i': i })}><I size={15} /><b>{t}</b><span className="hgai-s1__g">{g}</span></div>)}
   <i className="hgai-s1__pk" />
 </div></Scene>);
@@ -526,7 +526,7 @@ const S5 = () => (<Scene><div className="hgai-s hgai-s5" aria-hidden="true">
   <i className="hgai-s5__beam" /><Ic I={Bot} c="hgai-s5__bot" />
 </div></Scene>);
 
-const P_JSON = () => `আমার প্রশ্ন: [এখানে প্রশ্ন]. ${O()}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি JSON ব্লকে দাও, schema 'sirajan-collection/1'। প্রতিটি item-এ থাকবে: "url" (ফুল permalink, শেষে #finding-id সহ), "book", "title", "pdf_page", "first_words" (হুবহু), "match", "note"। ID বা লিংক নিজে বানাবে না। search URL-এ বাংলা query UTF-8 percent-encoded করবে। শেষে এক লাইনে বলো কতটি finding পড়েছ কতটির মধ্যে।`;
+const P_JSON = () => `আমার প্রশ্ন: [এখানে প্রশ্ন]. ${O()}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি ছোট JSON ব্লকে দাও: {"name": "কালেকশনের নাম", "links": ["permalink"]}। শুধু নাম আর হুবহু permalink (শেষে #finding-id সহ), আর কিছু না। লিংক নিজে বানাবে না। search URL-এ বাংলা query UTF-8 percent-encoded করবে।`;
 
 const AI_STEPS: GuideStep[] = [
   {
@@ -540,7 +540,7 @@ const AI_STEPS: GuideStep[] = [
           <li><Upload size={15} aria-hidden="true" /><span><b>ব্রাউজিং নেই:</b> বইয়ের পাতা থেকে TXT বা JSON নামিয়ে AI-তে আপলোড করুন, তারপর প্রশ্ন করুন।</span></li>
           <li><Layers size={15} aria-hidden="true" /><span><b>Projects / Custom GPT / Gems / NotebookLM:</b> <code>SKILL.md</code> আর বইয়ের ফাইল একবার যোগ করে রাখুন, পরে প্রতিবার নতুন করে বলতে হবে না।</span></li>
           <li><Terminal size={15} aria-hidden="true" /><span><b>কোডিং এজেন্ট</b> (Claude Code, Codex ইত্যাদি): <code>openapi.json</code> আর <code>index.tsv</code> দিন। এরা search, verify আর part-ফাইল নিজেই চালায়।</span></li>
-          <li><Cpu size={15} aria-hidden="true" /><span><b>লোকাল মডেল:</b> এদের মনে রাখার জায়গা কম। কালেকশন থেকে "Copy as AI context" নিন, তবে একবারে ২০–৩০টির বেশি finding দেবেন না।</span></li>
+          <li><Cpu size={15} aria-hidden="true" /><span><b>লোকাল মডেল:</b> এদের মনে রাখার জায়গা কম। একবারে ২০–৩০টির বেশি finding দেবেন না।</span></li>
         </ul>
       </>
     ),
@@ -577,7 +577,7 @@ const AI_STEPS: GuideStep[] = [
     title: 'জমানো কালেকশন AI-কে দিয়ে কাজে লাগান',
     body: (
       <>
-        <p>কালেকশন পাতায় <strong>Copy as AI context</strong> চাপুন, AI-তে পেস্ট করুন, তারপর যা করাতে চান বলুন। কয়েকটা কাজের উদাহরণ:</p>
+        <p>কালেকশন পাতার লিংকগুলো AI-কে দিন, তারপর যা করাতে চান বলুন। কয়েকটা কাজের উদাহরণ:</p>
         <ul className="hgai-list hgai-list--plain">
           <li>উপ-বিষয় অনুযায়ী findings ভাগ করা</li>
           <li>বই-বই তুলনা, মিল ও অমিল টেবিলে</li>
@@ -589,7 +589,7 @@ const AI_STEPS: GuideStep[] = [
           <li>কোন দিকটা এখনো বাদ আছে তা খোঁজা</li>
           <li>AI-র দেওয়া উদ্ধৃতি verify দিয়ে আবার মিলিয়ে নেওয়া</li>
         </ul>
-        <p className="hgai-note">সাধারণ ধারাটা এরকম: প্রশ্ন করুন, JSON নিন, এখানে পেস্ট করে Verified দেখুন, ভুলগুলো বাদ দিন, সেভ করুন। এরপর "Copy as AI context" দিয়ে পরের প্রশ্ন করুন।</p>
+        <p className="hgai-note">সাধারণ ধারাটা এরকম: প্রশ্ন করুন, JSON নিন, এখানে পেস্ট করে Verified দেখুন, ভুলগুলো বাদ দিন, সেভ করুন। </p>
       </>
     ),
     cta: { to: '/collections', label: 'Collections' },

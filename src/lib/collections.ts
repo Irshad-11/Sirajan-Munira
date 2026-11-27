@@ -108,10 +108,10 @@ export function parseCollectionJson(input: string): ParseResult {
     res.name = typeof data.name === 'string' ? data.name.slice(0, 200) : '';
     res.description = typeof data.description === 'string' ? data.description.slice(0, 2000) : '';
     res.query = typeof data.query === 'string' ? data.query.slice(0, 1000) : '';
-    items = data.items;
+    items = data.items ?? data.links ?? data.urls;
   } else { res.errors.push({ en: 'Expected a JSON object with "items" (or an array).', bn: '"items" সহ একটি JSON অবজেক্ট (বা অ্যারে) দরকার।' }); return res; }
 
-  if (!Array.isArray(items)) { res.errors.push({ en: 'Missing "items" array.', bn: '"items" অ্যারে নেই।' }); return res; }
+  if (!Array.isArray(items)) { res.errors.push({ en: 'Missing "links" list.', bn: '"links" তালিকা নেই।' }); return res; }
   if (items.length === 0) { res.errors.push({ en: '"items" is empty.', bn: '"items" খালি।' }); return res; }
   if (items.length > MAX_ITEMS) { res.errors.push({ en: `Too many items (${items.length}); the limit is ${MAX_ITEMS}.`, bn: `আইটেম অনেক বেশি (${items.length}); সীমা ${MAX_ITEMS}।` }); return res; }
 
@@ -359,14 +359,8 @@ export function importLocalStore(text: string): { added: number; error?: string 
 }
 
 // ---------------- export ----------------
-export function exportJson(c: { name: string; description?: string; query?: string }, rows: { item: StoredItem; live: LiveFinding | null }[]): string {
-  return JSON.stringify({
-    schema: SCHEMA, name: c.name, description: c.description || undefined, query: c.query || undefined,
-    items: rows.map(({ item, live }) => ({
-      id: item.id, url: live ? permalinkFor(live.bookSlug, live.id) : undefined, book: live?.bookSlug, title: live?.title,
-      pdf_page: live ? live.page ?? 'not recorded' : undefined, first_words: live?.firstWords, match: item.match, relevance: item.relevance, note: item.note,
-    })),
-  }, null, 1);
+export function exportJson(c: { name: string }, rows: { item: StoredItem; live: LiveFinding | null }[]): string {
+  return JSON.stringify({ name: c.name, links: rows.filter((r) => r.live).map((r) => permalinkFor(r.live!.bookSlug, r.live!.id)) }, null, 1);
 }
 
 export function aiContext(c: { name: string; query?: string }, rows: { item: StoredItem; live: LiveFinding | null }[]): string {
