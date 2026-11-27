@@ -41,22 +41,20 @@
 .hg.hgai .hg-panel__text strong{color:var(--hgai)}
 
 /* ---- per-tab scenes ---- */
-.hgai-sw{--k:1;width:calc(360px * var(--k));height:calc(170px * var(--k));margin:0 auto;max-width:100%}
+.hgai-sw{--k:1;width:calc(360px * var(--k));height:calc(172px * var(--k));margin:0 auto;max-width:100%}
 @media(max-width:560px){.hgai-sw{--k:.8}}
 @media(max-width:380px){.hgai-sw{--k:.76}}
 .hgai-sw>.hgai-s{transform:scale(var(--k));transform-origin:0 0;width:360px}
 .hgai-s{--c:var(--hgai,var(--accent));position:relative;width:100%;max-width:360px;height:170px;margin:0 auto;overflow:hidden;color:var(--c)}
 .hgai-s svg{position:absolute;inset:0;width:100%;height:100%;fill:none;stroke:var(--border);stroke-width:1.5}
 .hgai-i{position:absolute;display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--c)}
-/* S1 orbit */
-.hgai-s1 svg circle{stroke-dasharray:3 6}
-.hgai-s1__c{left:163px;top:68px;background:var(--c);color:var(--bg);border-color:var(--c);animation:s1b 3s ease-in-out infinite}
-.hgai-s1__ring{position:absolute;left:180px;top:85px;width:0;height:0;animation:s1r 18s linear infinite}
-.hgai-s1__ring .hgai-i{left:-17px;top:-17px;transform:rotate(var(--a)) translateY(-62px) rotate(calc(var(--a) * -1));animation:s1u 18s linear infinite,s1p 18s linear infinite;animation-delay:0s,var(--d)}
-@keyframes s1r{to{transform:rotate(360deg)}}
-@keyframes s1u{to{transform:rotate(var(--a)) translateY(-62px) rotate(calc(var(--a) * -1 - 360deg))}}
-@keyframes s1p{0%,20%,100%{border-color:var(--border)}4%,12%{border-color:var(--c)}}
-@keyframes s1b{50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--c) 18%,transparent)}}
+/* S1 choose */
+.hgai-s1__r{position:absolute;left:10px;right:10px;top:calc(4px + var(--i) * 33px);height:29px;display:grid;grid-template-columns:20px 1fr auto;gap:8px;align-items:center;padding:0 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:.78rem;animation:s1h 10s infinite;animation-delay:calc(var(--i) * 2s)}
+.hgai-s1__r svg{color:var(--c)}.hgai-s1__g{font:600 .68rem/1 ui-monospace,monospace;color:var(--muted);padding:3px 7px;border:1px dashed var(--border);border-radius:99px}
+.hgai-s1__pk{position:absolute;left:0;top:14px;width:8px;height:8px;border-radius:50%;background:var(--c);animation:s1p 10s infinite}
+@keyframes s1h{0%,18%,100%{border-color:var(--border);transform:none}2%,16%{border-color:var(--c);transform:translateX(4px)}}
+@keyframes s1p{0%{transform:translate(0,0)}20%{transform:translate(0,33px)}40%{transform:translate(0,66px)}60%{transform:translate(0,99px)}80%,100%{transform:translate(0,132px)}}
+.hgai-lb{position:absolute;top:150px;font-size:.68rem;line-height:1.2;color:var(--muted);text-align:center;white-space:nowrap}
 /* S2 typewriter */
 .hgai-s2__card{position:absolute;left:10px;top:28px;width:128px;height:114px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);display:grid;gap:10px;align-content:start}
 .hgai-s2__card i{display:block;height:8px;width:0;border-radius:4px;background:var(--c);opacity:.7;animation:s2t 6s steps(10) infinite;animation-delay:calc(var(--n) * .45s)}
@@ -99,8 +97,12 @@
 @keyframes s5l{0%,18%{border-color:var(--border);color:var(--muted)}4%,14%{border-color:var(--c);color:var(--c);transform:translateX(6px)}}
 @media(prefers-reduced-motion:reduce){
  .hgai-s *{animation:none!important}
- .hgai-s1__ring .hgai-i{transform:rotate(var(--a)) translateY(-62px) rotate(calc(var(--a) * -1))}
+ 
  .hgai-s2__card i{width:var(--w)}.hgai-s2__chat u{opacity:1}.hgai-s2__pk{display:none}
  .hgai-s3__c{transform:translateX(calc(60px + var(--i) * 80px))}.hgai-s3__c .a{display:none}.hgai-s3__c .b{opacity:1}
  .hgai-s4__o,.hgai-s4__r b{opacity:1}.hgai-s5__beam,.hgai-s5__bot{display:none}.hgai-s5__r{color:var(--c)}}
 .hgai-prompt__text{max-height:3.3em}
+.hgai-s1__r svg{position:static;inset:auto;width:15px;height:15px;stroke:currentColor;stroke-width:2;fill:none}
+.hgai-s1__r b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hgai-lb{font-size:.8rem}
+@media(max-width:560px){.hgai-lb{font-size:.86rem}}

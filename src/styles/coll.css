@@ -52,3 +52,7 @@
 input::placeholder,textarea::placeholder{font-size:.85rem;opacity:.65}
 @media(max-width:600px){input::placeholder,textarea::placeholder{font-size:.8rem}}
 .co-in+.co-btn{margin-top:10px}input::placeholder,textarea::placeholder{opacity:.75}
+.co-help{border:1px solid var(--border);border-left:4px solid #c0392b;border-radius:10px;padding:12px;margin:12px 0;background:color-mix(in srgb,#c0392b 5%,transparent);line-height:1.7}
+.co-help h3{margin:0 0 6px;font-size:1rem;display:flex;gap:6px;align-items:center}.co-help p{margin:.3rem 0;font-size:.92rem}
+.co-help-g{border-top:1px dashed var(--border);margin-top:.6rem;padding-top:.5rem}.co-help-g b{display:block}.co-help-ex{color:var(--muted);font-size:.82rem;word-break:break-word}
+.co-help ol{margin:.3rem 0 .6rem;padding-left:1.2rem;font-size:.92rem}

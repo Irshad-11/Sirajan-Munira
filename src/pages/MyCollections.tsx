@@ -14,7 +14,7 @@ import '../styles/coll.css';
 
 const SITE = 'https://sirajan-munira.vercel.app';
 export const COLLECTION_PROMPT = (q: string) =>
-  `আমার প্রশ্ন: ${q}. ${SITE}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি JSON ব্লকে দাও, schema '${SCHEMA}', প্রতিটি item-এ ফুল permalink, book, title, pdf_page, first_words (হুবহু), match, note থাকবে। শেষে এক লাইনে বলো কতটি finding পড়েছ কতটির মধ্যে।`;
+  `আমার প্রশ্ন: ${q}. ${SITE}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি JSON ব্লকে দাও, schema '${SCHEMA}'। প্রতিটি item-এ থাকবে: "url" (ফুল permalink, শেষে #finding-id সহ), "book", "title", "pdf_page", "first_words" (হুবহু), "match", "note"। ID বা লিংক নিজে বানাবে না, শুধু সাইটে দেখা permalink কপি করবে। search URL-এ বাংলা query অবশ্যই UTF-8 percent-encoded করবে। শেষে এক লাইনে বলো কতটি finding পড়েছ কতটির মধ্যে।`;
 
 function download(name: string, text: string, mime = 'application/json') {
   const a = document.createElement('a');
@@ -62,6 +62,58 @@ function Compare({ r }: { r: ResolvedItem }) {
           <div><span>Site says · সাইটে আছে</span><p>{site}</p></div>
         </div>
       ))}
+    </div>
+  );
+}
+
+
+const REJECT_INFO: Record<string, { why: string; fix: string }> = {
+  invalid: {
+    why: 'Item-এ লিংক বা ID পাওয়া যায়নি, কিংবা লিংকটা পড়া যায়নি। সবচেয়ে সাধারণ কারণ: AI ভুল ফিল্ড-নাম দিয়েছে, অথবা লিংকের শেষে #finding-id বাদ পড়েছে।',
+    fix: 'প্রতিটি item-এ "url" ফিল্ডে পুরো permalink থাকতে হবে, যেমন https://sirajan-munira.vercel.app/book/<বই>#<finding-id>। শুধু বইয়ের লিংক চলবে না। বিকল্প হিসেবে "id" ফিল্ডে finding-এর UUID দিলেও হয়।',
+  },
+  unknown_id: {
+    why: 'লিংকের #id এই সাইটে নেই। AI কখনো ID নিজে বানিয়ে ফেলে, কখনো কপি করতে গিয়ে এক-দুটো অক্ষর বদলে যায়। কখনো কনটেন্ট মুছে গেছে বা বইটা লুকানো আছে।',
+    fix: 'AI-কে বলুন শুধু index.tsv, search বা বইয়ের part-ফাইলে যে permalink দেখেছে সেটাই হুবহু কপি করতে। নিজে বানানো বা সংক্ষিপ্ত লিংক দেওয়া চলবে না।',
+  },
+  wrong_domain: {
+    why: 'লিংকটা এই সাইটের নয়। যেমন localhost, ভিন্ন ডোমেইন বা কোনো সংক্ষিপ্ত লিংক। নিরাপত্তার কারণে অন্য সাইটের লিংক গ্রহণ করা হয় না।',
+    fix: 'লিংক শুরু হতে হবে https://sirajan-munira.vercel.app দিয়ে। অন্য সাইটের লিংক বাদ দিন, নইলে AI-কে সঠিক permalink দিতে বলুন।',
+  },
+  duplicate: { why: 'একই finding আগের কোনো item-এও আছে, তাই এটা বাড়তি ধরা হয়েছে।', fix: 'কিছু ঠিক করতে হবে না। একটি কপিই রাখা হয়।' },
+  mismatch: { why: 'id আর লিংক দুটো আলাদা finding দেখাচ্ছে।', fix: 'id-টাকেই ঠিক ধরা হয়েছে। AI-কে বলুন id আর লিংক একই finding থেকে নিতে।' },
+};
+
+export function RejectHelp({ rows, onCopy }: { rows: ResolvedItem[]; onCopy: (t: string) => void }) {
+  const bad = rows.filter((r) => !isUsable(r) && r.status !== 'duplicate');
+  const dup = rows.filter((r) => r.status === 'duplicate').length;
+  if (!bad.length && !dup) return null;
+  const by = new Map<string, ResolvedItem[]>();
+  bad.forEach((r) => (by.get(r.status) || by.set(r.status, []).get(r.status)!).push(r));
+  const fixPrompt = `তোমার দেওয়া JSON-এর ${bad.length}টি item সাইট গ্রহণ করেনি। ঠিক করে আবার পুরো JSON দাও, শুধু একটি JSON ব্লকে:\n- প্রতিটি item-এ "url" ফিল্ডে পুরো permalink থাকবে (${SITE}/book/<বই>#<finding-id>)।\n- ID বা লিংক নিজে বানাবে না; শুধু index.tsv, search বা part-ফাইলে দেখা permalink হুবহু কপি করবে।\n- বাংলা লেখা ঠিক রাখো, কিন্তু search-এর URL-এ query অবশ্যই percent-encoded (UTF-8) হবে।\nযে item-গুলো ঠিক করতে পারছ না সেগুলো বাদ দাও এবং শেষে এক লাইনে জানাও কয়টি বাদ গেল।`;
+  return (
+    <div className="co-help" role="region" aria-label="কেন বাতিল হলো">
+      <h3><Info size={16} aria-hidden /> কেন কিছু item বাতিল হলো</h3>
+      <p>বাতিল মানে ফাইল নষ্ট নয়। সাইট প্রতিটি item আসল ডাটাবেসের সঙ্গে মিলিয়ে দেখে, আর যেগুলো মেলেনি সেগুলো বাদ রাখে। নিচে কারণ আর সমাধান।</p>
+      {[...by.entries()].map(([st, rs]) => (
+        <div key={st} className="co-help-g">
+          <b>{STATUS_LABEL[st]} · {rs.length}টি</b>
+          <p><u>কারণ:</u> {REJECT_INFO[st]?.why}</p>
+          <p><u>সমাধান:</u> {REJECT_INFO[st]?.fix}</p>
+          <p className="co-help-ex">উদাহরণ: {(rs[0].raw.title || rs[0].raw.url || rs[0].raw.id || '(খালি item)').toString().slice(0, 90)}</p>
+        </div>
+      ))}
+      {dup > 0 && <div className="co-help-g"><b>{STATUS_LABEL.duplicate} · {dup}টি</b><p>{REJECT_INFO.duplicate.why} {REJECT_INFO.duplicate.fix}</p></div>}
+      <div className="co-help-g">
+        <b>কীভাবে ঠিক করবেন (ধাপে ধাপে)</b>
+        <ol>
+          <li>নিচের বোতামে চাপ দিয়ে সংশোধনের নির্দেশ কপি করুন।</li>
+          <li>যে AI চ্যাটে JSON পেয়েছেন সেখানেই সেটা পেস্ট করুন।</li>
+          <li>AI নতুন JSON দিলে সেটা এখানে আবার পেস্ট করে Validate করুন।</li>
+          <li>তবু কিছু বাতিল হলে সেগুলো বাদ দিয়েই বাকিগুলো সেভ করতে পারেন। বাতিল item আপনা থেকেই সেভ হয় না।</li>
+        </ol>
+        <button className="co-btn" onClick={() => onCopy(fixPrompt)}><Copy size={15} aria-hidden /> AI-কে সংশোধনের নির্দেশ কপি করুন</button>
+      </div>
     </div>
   );
 }
@@ -182,6 +234,7 @@ export function CollectionImport() {
             <b>{counts.ok}</b> valid · <b>{counts.warn}</b> check · <b>{counts.bad}</b> rejected
             {counts.warn > 0 && ' — "Check" মানে AI-এর লেখা সাইটের সাথে মেলেনি; সাইটেরটাই ঠিক ধরা হবে।'}
           </p>
+          <RejectHelp rows={rows} onCopy={async (t) => setToast((await copyToClipboard(t)) ? 'নির্দেশ কপি হয়েছে' : 'Copy failed')} />
           {groups.map(([book, rs]) => (
             <div key={book} className="co-group">
               <h3>{book} <small>({rs.length})</small></h3>

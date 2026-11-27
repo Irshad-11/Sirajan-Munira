@@ -16,3 +16,7 @@
 Independent reviewer: no XSS / prototype-pollution / injection found. Fixed after review: local-store import hardening (fresh ids, caps), storage-full handling, theme-token contrast, false ✅ on empty/short claims, slug check, stale preview, null-collection crash, Esc on menu, tap targets, hidden-book wording, nested-JSON guard.
 
 Known limits: Global import and admin buttons were not exercised against a real Supabase admin session; real raw (unencoded) Bengali URLs rely on Vercel's edge percent-encoding; Gemini cannot be prefilled via URL (prompt is copied instead).
+
+## Update: real AI output ("permalink" field, extra keys)
+A real AI answer used `"permalink"` instead of `"url"` per item and added extra top-level keys (`disclaimer`, `coverage`, `source`); all 26 items showed as rejected. Now: `permalink`/`link`/`href` are read as `url` (a note says so), `heading_id`/`finding_id` as `id`, `page` as `pdf_page`; unknown top-level keys are ignored; `match` accepts any word (direct/related/peripheral). Rejected items get a "why / how to fix" panel plus a copy-ready correction prompt for the AI. Tested with a mixed file: alias items accepted; unknown ID, missing link, book-only link and foreign domain explained separately.
+Bengali URL encoding: llms.txt, SKILL.md and SEARCH.md now state the UTF-8 percent-encoding rule, the `next_offset` paging rule and a fallback for tools that only open URLs the user pasted; the site's prompts embed an already-encoded search link.

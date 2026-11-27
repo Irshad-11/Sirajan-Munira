@@ -95,6 +95,7 @@ Step 1 — Read these raw files first (plain text, not JavaScript pages; use you
 2. ${u.skill}   (how to search, cite and verify)
 3. ${u.search}   (search API: exact / keyword / semantic)
 4. ${u.index}   (index of every finding: id, title, PDF page, first words, permalink)
+${opts.query ? `\nReady search link (Bengali already percent-encoded; open it exactly as written):\n${(opts.origin || siteOrigin())}/ai-integration/search?q=${encodeURIComponent(opts.query)}&mode=auto&limit=20\nIf the response has next_offset, open the same link with &offset=<next_offset> until it is null.\n` : ''}\nBengali in URLs: percent-encode the query as UTF-8 (space = %20). Raw Bengali or spaces are often rejected by fetch tools. If you cannot build or open such URLs, say so and use index.tsv / keywords.tsv / the book part files instead.
 
 Step 2 — Search carefully. ${scope}
 - Rewrite my query into several Bengali phrasings, key words and spelling variants, and run each through ${u.searchApi}?q=<phrase>&mode=auto

@@ -119,12 +119,15 @@ export function parseCollectionJson(input: string): ParseResult {
   res.items = (items as any[]).map((it) => {
     if (typeof it === 'string') return { url: it.slice(0, 2000) };
     if (!it || typeof it !== 'object') return {};
+    // AIs often write "permalink" (the prompt says "full permalink"); accept the usual aliases for url.
+    const urlLike = it.url ?? it.permalink ?? it.link ?? it.href;
     return {
-      id: str(it.id, 64)?.trim(), url: str(it.url, 2000)?.trim(), book: str(it.book, 300), title: str(it.title, 500),
-      pdf_page: str(it.pdf_page, 40), first_words: str(it.first_words, 400), match: str(it.match, 20),
+      id: str(it.id ?? it.heading_id ?? it.finding_id, 64)?.trim(), url: str(urlLike, 2000)?.trim(), book: str(it.book, 300), title: str(it.title, 500),
+      pdf_page: str(it.pdf_page ?? it.page ?? it.pdf_page_number, 40), first_words: str(it.first_words, 400), match: str(it.match, 20),
       relevance: typeof it.relevance === 'number' ? it.relevance : undefined, note: str(it.note, 1000),
     };
   });
+  if ((items as any[]).some((it) => it && typeof it === 'object' && !it.url && !it.id && (it.permalink || it.link || it.href))) res.notes.push({ en: 'Read "permalink" as "url".', bn: 'প্রতিটি item-এর "permalink" ফিল্ডকে লিংক হিসেবে ধরা হয়েছে।' });
   res.ok = true;
   return res;
 }
@@ -256,13 +259,13 @@ export async function resolveItems(items: RawItem[]): Promise<ResolvedItem[]> {
       if (p.ok === false) { const why = (p as { reason: string }).reason; status = why === 'wrong_domain' ? 'wrong_domain' : 'invalid'; detail = why === 'wrong_domain' ? { en: 'URL is not from this site.', bn: 'এই লিংক এই সাইটের নয়।' } : { en: 'URL could not be read.', bn: 'লিংক পড়া যায়নি।' }; }
       else {
         urlId = p.id;
-        if (!p.id && !idOk) { status = 'invalid'; detail = { en: 'URL has no #finding-id.', bn: 'লিংকে #finding-id নেই।' }; }
+        if (!p.id && !idOk) { status = 'invalid'; detail = { en: 'The link has no #finding-id at the end.', bn: 'লিংকের শেষে #finding-id নেই; শুধু বইয়ের লিংক দিলে finding চেনা যায় না।' }; }
       }
     }
     if (status === 'valid') {
       if (idOk && urlId && idOk !== urlId.toLowerCase()) { status = 'mismatch'; detail = { en: 'id and URL point to different findings (the id was used).', bn: 'id ও লিংক আলাদা finding-এর — id ধরা হয়েছে।' }; }
       id = idOk || (urlId ? urlId.toLowerCase() : null);
-      if (!id) { status = 'invalid'; detail = { en: 'Needs an id or a permalink.', bn: 'id বা permalink দরকার।' }; }
+      if (!id) { status = 'invalid'; detail = { en: 'No "url" (or "permalink") and no "id" found in this item.', bn: 'এই item-এ "url" (বা "permalink") ও "id" কোনোটাই নেই।' }; }
     }
     return { key, raw, status, id, detail };
   });
@@ -273,7 +276,7 @@ export async function resolveItems(items: RawItem[]): Promise<ResolvedItem[]> {
     let status: ItemStatus = p.status as ItemStatus; let detail = p.detail;
     const lf = p.id ? live.get(p.id) ?? null : null;
     if (p.id && (status === 'valid' || status === 'mismatch')) {
-      if (!lf) { status = 'unknown_id'; detail = { en: 'No such finding on this site.', bn: 'এই সাইটে এমন finding নেই।' }; }
+      if (!lf) { status = 'unknown_id'; detail = { en: 'No finding with this ID on the site.', bn: 'এই ID-র কোনো finding সাইটে পাওয়া যায়নি; ID সম্ভবত AI নিজে বানিয়েছে বা ভুল কপি হয়েছে।' }; }
       else if (seen.has(p.id)) { status = 'duplicate'; detail = { en: 'Duplicate of an earlier item.', bn: 'আগের আইটেমের ডুপ্লিকেট।' }; }
       else seen.add(p.id);
     }

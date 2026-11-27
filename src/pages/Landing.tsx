@@ -447,6 +447,7 @@ function PromptLab() {
   const bk = book.trim() || '[বইয়ের নাম]';
   const qt = quote.trim() || '[এখানে বাক্যটি পেস্ট করুন]';
   const o = O();
+  const enc = topic.trim() ? `${o}/ai-integration/search?q=${encodeURIComponent(topic.trim())}&mode=auto&limit=20` : '';
   return (
     <>
       <label className="hgai-field">
@@ -461,7 +462,7 @@ function PromptLab() {
         <span><Hash size={14} aria-hidden="true" /> যাচাই করতে চাওয়া বাক্য</span>
         <textarea rows={2} value={quote} onChange={(e) => setQuote(e.target.value)} placeholder="বাক্যটি পেস্ট করুন" />
       </label>
-      <CopyChip icon={Globe2} label="সব বইয়ে খুঁজুন" text={`আমার প্রশ্ন: ${t}. ${o}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। প্রতিটির ফুল permalink, বই, PDF পৃষ্ঠা ও শুরুর কথা দাও। শেষে বলো কতটি finding পড়েছ।`} />
+      <CopyChip icon={Globe2} label="সব বইয়ে খুঁজুন" text={`আমার প্রশ্ন: ${t}. ${o}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো।${enc ? ` প্রথমে এই তৈরি-করা search লিংকটা খোলো (বাংলা আগেই encode করা): ${enc} — উত্তরে next_offset থাকলে &offset=<সেই সংখ্যা> যোগ করে বাকি পাতাও পড়ো।` : ''} প্রতিটির ফুল permalink, বই, PDF পৃষ্ঠা ও শুরুর কথা দাও। শেষে বলো কতটি finding পড়েছ।`} />
       <CopyChip icon={BookOpen} label="একটি বইয়ের ভেতরে" text={`${o}/llms.txt পড়ো। তারপর শুধু "${bk}" বইয়ের index.tsv ও part-ফাইলগুলো (শেষে END OF BOOK পর্যন্ত) পড়ে "${t}" সম্পর্কিত সব finding দাও, permalink ও PDF পৃষ্ঠা সহ।`} />
       <CopyChip icon={FileJson} label="কালেকশন JSON" text={`আমার প্রশ্ন: ${t}. ${o}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি JSON ব্লকে দাও, schema 'sirajan-collection/1', প্রতিটি item-এ ফুল permalink, book, title, pdf_page, first_words (হুবহু), match, note থাকবে। শেষে এক লাইনে বলো কতটি finding পড়েছ কতটির মধ্যে।`} />
       <CopyChip icon={ShieldCheck} label="উদ্ধৃতি যাচাই" text={`${o}/llms.txt পড়ো। নিচের বাক্যটি সাইটের কোন finding-এ আছে খুঁজে দাও (verify endpoint ব্যবহার করে)। পাওয়া গেলে permalink, বই, PDF পৃষ্ঠা দাও; না পেলে স্পষ্ট বলো "পাওয়া যায়নি"।\n\nবাক্য: ${qt}`} />
@@ -490,16 +491,17 @@ const O = () => siteOrigin();
 const Scene = ({ children }: { children: React.ReactNode }) => <div className="hgai-sw" aria-hidden="true">{children}</div>;
 const v = (o: Record<string, string | number>) => o as React.CSSProperties;
 const Ic = ({ I, c = '', s }: { I: LucideIcon; c?: string; s?: React.CSSProperties }) => <span className={`hgai-i ${c}`} style={s}><I size={16} /></span>;
-// 1 ORBIT: the five ways to use AI circle one assistant
-const S1 = () => (<Scene><div className="hgai-s hgai-s1" aria-hidden="true">
-  <svg viewBox="0 0 360 170"><circle cx="180" cy="85" r="62" /><circle cx="180" cy="85" r="34" /></svg>
-  <Ic I={Bot} c="hgai-s1__c" />
-  <div className="hgai-s1__ring">{[Globe2, Upload, Layers, Terminal, Cpu].map((I, i) => <Ic key={i} I={I} s={v({ '--a': `${i * 72}deg`, '--d': `${i * 3.6}s` })} />)}</div>
+// 1 CHOOSE: what to hand to each kind of AI
+const S1 = () => (<Scene><div className="hgai-s hgai-s1">
+  {([[Globe2, 'ব্রাউজিং AI', 'লিংক'], [Upload, 'ফাইল আপলোড', 'TXT / JSON'], [Layers, 'Project / GPT', 'SKILL.md'], [Terminal, 'কোডিং এজেন্ট', 'openapi.json'], [Cpu, 'লোকাল মডেল', 'AI context']] as [LucideIcon, string, string][]).map(([I, t, g], i) =>
+    <div key={t} className="hgai-s1__r" style={v({ '--i': i })}><I size={15} /><b>{t}</b><span className="hgai-s1__g">{g}</span></div>)}
+  <i className="hgai-s1__pk" />
 </div></Scene>);
 // 2 TYPEWRITER: prompt types out -> copy -> packet flies -> chat reply
 const S2 = () => (<Scene><div className="hgai-s hgai-s2" aria-hidden="true">
   <div className="hgai-s2__card">{[100, 82, 94, 56].map((w, i) => <i key={i} style={v({ '--w': `${w}%`, '--n': i })} />)}</div>
   <Ic I={Copy} c="hgai-s2__cp" /><b className="hgai-s2__pk" />
+  <span className="hgai-lb" style={v({ left: 10, width: 128 })}>১. প্রম্পট লেখা হয়</span><span className="hgai-lb" style={v({ left: 140, width: 70 })}>২. কপি</span><span className="hgai-lb" style={v({ right: 10, width: 130 })}>৩. AI উত্তর দেয়</span>
   <div className="hgai-s2__chat"><u className="me" /><u className="ai"><em /><em /><em /></u><u className="ln" /></div>
 </div></Scene>);
 // 3 CONVEYOR: JSON blocks ride a belt, pass the scanner gate, become Verified/Check badges, drop into folder
@@ -509,12 +511,13 @@ const S3 = () => (<Scene><div className="hgai-s hgai-s3" aria-hidden="true">
   {[0, 1, 2].map(i => <span key={i} className={`hgai-s3__c${i === 2 ? ' warn' : ''}`} style={v({ '--i': i })}>
     <Braces className="a" size={18} />{i === 2 ? <AlertTriangle className="b" size={18} /> : <Check className="b" size={18} />}</span>)}
   <Ic I={FolderOpen} c="hgai-s3__f" />
+  <span className="hgai-lb" style={v({ left: 6, width: 100 })}>AI-এর JSON</span><span className="hgai-lb" style={v({ left: 130, width: 100 })}>সাইটে যাচাই</span><span className="hgai-lb" style={v({ right: 4, width: 90 })}>কালেকশনে সেভ</span>
 </div></Scene>);
 // 4 RADAR: a sweep over the collection pings findings; results light up on the right
 const S4 = () => (<Scene><div className="hgai-s hgai-s4" aria-hidden="true">
   <div className="hgai-s4__r"><i className="sw" />{[[40, 22], [104, 36], [92, 100], [30, 88]].map(([x, y], i) => <b key={i} style={v({ left: x, top: y, '--d': `${[0.9, 1.5, 3, 4.1][i]}s` })} />)}</div>
-  <Ic I={FolderOpen} c="hgai-s4__c" />
-  {[Table2, GitCompare, FileText].map((I, i) => <Ic key={i} I={I} s={v({ top: 22 + i * 46, '--d': `${1.4 + i * 1.3}s` })} c="hgai-s4__o" />)}
+  <Ic I={FolderOpen} c="hgai-s4__c" /><span className="hgai-lb" style={v({ left: 30, width: 140, top: 156 })}>আপনার কালেকশন</span>
+  {[[Table2, 'টেবিল'], [GitCompare, 'তুলনা'], [FileText, 'প্রবন্ধ']].map(([I, t], i) => <React.Fragment key={t as string}><Ic I={I as LucideIcon} s={v({ top: 22 + i * 46, '--d': `${1.4 + i * 1.3}s` })} c="hgai-s4__o" /><span className="hgai-lb" style={v({ left: 290, top: 33 + i * 46, width: 64, textAlign: 'left' })}>{t as string}</span></React.Fragment>)}
 </div></Scene>);
 // 5 STACK: a reader walks down the file layers: llms.txt > index.tsv > part-N > END OF BOOK
 const S5 = () => (<Scene><div className="hgai-s hgai-s5" aria-hidden="true">
@@ -523,21 +526,21 @@ const S5 = () => (<Scene><div className="hgai-s hgai-s5" aria-hidden="true">
   <i className="hgai-s5__beam" /><Ic I={Bot} c="hgai-s5__bot" />
 </div></Scene>);
 
-const P_JSON = () => `আমার প্রশ্ন: [এখানে প্রশ্ন]. ${O()}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি JSON ব্লকে দাও, schema 'sirajan-collection/1', প্রতিটি item-এ ফুল permalink, book, title, pdf_page, first_words (হুবহু), match, note থাকবে। শেষে এক লাইনে বলো কতটি finding পড়েছ কতটির মধ্যে।`;
+const P_JSON = () => `আমার প্রশ্ন: [এখানে প্রশ্ন]. ${O()}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি JSON ব্লকে দাও, schema 'sirajan-collection/1'। প্রতিটি item-এ থাকবে: "url" (ফুল permalink, শেষে #finding-id সহ), "book", "title", "pdf_page", "first_words" (হুবহু), "match", "note"। ID বা লিংক নিজে বানাবে না। search URL-এ বাংলা query UTF-8 percent-encoded করবে। শেষে এক লাইনে বলো কতটি finding পড়েছ কতটির মধ্যে।`;
 
 const AI_STEPS: GuideStep[] = [
   {
-    id: 'ai-ways', icon: Bot, tab: 'AI কীভাবে ব্যবহার করবেন', hint: '৫ ধরনের AI, ৫ রকম উপায়',
-    title: 'আপনার AI যেটাই হোক, ব্যবহারের উপায় আছে',
+    id: 'ai-ways', icon: Bot, tab: 'কোন AI-কে কী দেবেন', hint: 'AI-র ধরন অনুযায়ী উপায়',
+    title: 'আপনার AI যেটাই হোক, কাজ চালানো যায়',
     body: (
       <>
-        <p>এই সাইট AI-এর জন্য সরল টেক্সট ফাইল দেয়, তাই নিচের যেকোনো ধরনের AI দিয়েই কাজ করা যায়:</p>
+        <p>সাইট AI-র জন্য সাধারণ টেক্সট ফাইল দেয়, তাই নিচের সব ধরনের AI-ই কাজ করতে পারে। শুধু ধরন অনুযায়ী দেওয়ার জিনিসটা আলাদা।</p>
         <ul className="hgai-list">
-          <li><Globe2 size={15} aria-hidden="true" /><span><b>ব্রাউজিং আছে</b> (ChatGPT, Claude, Gemini-এর web সার্চ): নিচের প্রম্পট কপি করে পেস্ট করুন। AI নিজেই <code>llms.txt</code> থেকে শুরু করে বই খুঁজে নেবে।</span></li>
-          <li><Upload size={15} aria-hidden="true" /><span><b>ব্রাউজিং নেই:</b> বইয়ের পাতা বা কালেকশন থেকে TXT/JSON ডাউনলোড করে AI-তে আপলোড করুন, তারপর প্রশ্ন করুন।</span></li>
-          <li><Layers size={15} aria-hidden="true" /><span><b>Projects / Custom GPT / Gems / NotebookLM:</b> <code>SKILL.md</code> ও বইয়ের ফাইল একবার যোগ করুন, তারপর বারবার ব্যবহার করুন।</span></li>
-          <li><Terminal size={15} aria-hidden="true" /><span><b>কোডিং এজেন্ট</b> (Claude Code, Codex ইত্যাদি): <code>openapi.json</code> ও <code>index.tsv</code> দিন; এরা search, verify ও part-ফাইল নিজেই চালাতে পারে।</span></li>
-          <li><Cpu size={15} aria-hidden="true" /><span><b>লোকাল মডেল:</b> ছোট কনটেক্সট, তাই কালেকশন থেকে "Copy as AI context" নিন এবং একসাথে ২০–৩০টির বেশি finding দেবেন না।</span></li>
+          <li><Globe2 size={15} aria-hidden="true" /><span><b>ব্রাউজিং আছে</b> (ChatGPT, Claude, Gemini-এর web সার্চ): প্রম্পট কপি করে পেস্ট করুন। AI নিজে <code>llms.txt</code> খুলে বই খুঁজে নেবে।</span></li>
+          <li><Upload size={15} aria-hidden="true" /><span><b>ব্রাউজিং নেই:</b> বইয়ের পাতা থেকে TXT বা JSON নামিয়ে AI-তে আপলোড করুন, তারপর প্রশ্ন করুন।</span></li>
+          <li><Layers size={15} aria-hidden="true" /><span><b>Projects / Custom GPT / Gems / NotebookLM:</b> <code>SKILL.md</code> আর বইয়ের ফাইল একবার যোগ করে রাখুন, পরে প্রতিবার নতুন করে বলতে হবে না।</span></li>
+          <li><Terminal size={15} aria-hidden="true" /><span><b>কোডিং এজেন্ট</b> (Claude Code, Codex ইত্যাদি): <code>openapi.json</code> আর <code>index.tsv</code> দিন। এরা search, verify আর part-ফাইল নিজেই চালায়।</span></li>
+          <li><Cpu size={15} aria-hidden="true" /><span><b>লোকাল মডেল:</b> এদের মনে রাখার জায়গা কম। কালেকশন থেকে "Copy as AI context" নিন, তবে একবারে ২০–৩০টির বেশি finding দেবেন না।</span></li>
         </ul>
       </>
     ),
@@ -545,11 +548,11 @@ const AI_STEPS: GuideStep[] = [
     Visual: S1,
   },
   {
-    id: 'ai-prompts', icon: Copy, tab: 'রেডি প্রম্পট', hint: 'কপি করে সরাসরি পেস্ট',
+    id: 'ai-prompts', icon: Copy, tab: 'প্রম্পট বানান', hint: 'লিখুন, কপি করুন, পেস্ট করুন',
     title: 'প্রম্পট কপি করুন, AI-তে পেস্ট করুন',
     body: (
       <>
-        <p>নিচে আপনার প্রশ্ন লিখুন, প্রম্পটগুলো নিজে থেকেই বদলে যাবে। প্রিভিউ ছোট করে দেখানো হয়েছে; <strong>কপি</strong> চাপলে পুরো প্রম্পট কপি হবে।</p>
+        <p>প্রশ্নটা লিখলেই প্রম্পটগুলো সেই অনুযায়ী বদলে যায়। এখানে শুধু শুরুর দুই লাইন দেখাচ্ছে, কিন্তু <strong>কপি</strong> চাপলে পুরোটাই কপি হবে।</p><p className="hgai-note">বাংলা লেখা URL-এ সরাসরি বসালে অনেক AI লিংক খুলতে পারে না। তাই বানানো প্রম্পটে search লিংকটা আগেই encode করা থাকে।</p>
         <PromptLab />
       </>
     ),
@@ -557,55 +560,55 @@ const AI_STEPS: GuideStep[] = [
     Visual: S2,
   },
   {
-    id: 'ai-collect', icon: FileJson, tab: 'কালেকশন বানানো', hint: 'AI-এর JSON সাইটে যাচাই',
-    title: 'AI-এর উত্তর থেকে নিজের কালেকশন',
+    id: 'ai-collect', icon: FileJson, tab: 'কালেকশন বানান', hint: 'AI-র JSON সাইটে মিলিয়ে নিন',
+    title: 'AI-র উত্তর থেকে নিজের কালেকশন',
     body: (
       <>
-        <p>AI যা খুঁজে পায় তা JSON আকারে দিতে বলুন, তারপর <Link to="/collections/import">Import collection</Link> পাতায় পেস্ট করুন। সাইট প্রতিটি item আসল ডাটাবেসের সঙ্গে মিলিয়ে <strong>Verified</strong> অথবা <strong>Check</strong> চিহ্ন দেখাবে, ভুল হলে "AI বলেছে / সাইটে আছে" পাশাপাশি দেখাবে।</p>
+        <p>AI-কে JSON-এ উত্তর দিতে বলুন, তারপর <Link to="/collections/import">Import collection</Link> পাতায় পেস্ট করুন। সাইট প্রতিটি item ডাটাবেসের সঙ্গে মিলিয়ে <strong>Verified</strong> বা <strong>Check</strong> দেখায়। না মিললে "AI বলেছে" আর "সাইটে আছে" পাশাপাশি দেখা যায়। কোনো item বাতিল হলে পাতাতেই কারণ আর সমাধান লেখা থাকে।</p>
         <CopyChip label="কালেকশন JSON প্রম্পট" text={P_JSON()} />
-        <p>সেভ করার জায়গা: <strong>Temporary</strong> (এই ট্যাবে), <strong>Local</strong> (এই ডিভাইসে, Export করে ব্যাকআপ রাখা যায়)। সেভ করা কালেকশন <Link to="/my-collections">My collections</Link>-এ।</p>
+        <p>সেভ করা যায় দুই জায়গায়: <strong>Temporary</strong> (শুধু এই ট্যাবে) অথবা <strong>Local</strong> (এই ডিভাইসে, Export করে ব্যাকআপও রাখা যায়)। সেভ করা কালেকশন <Link to="/my-collections">My collections</Link>-এ পাবেন।</p>
       </>
     ),
     cta: { to: '/collections/import', label: 'Import collection', primary: true },
     Visual: S3,
   },
   {
-    id: 'ai-analyze', icon: Sparkles, tab: 'AI দিয়ে বিশ্লেষণ', hint: 'সারাংশ, তুলনা, প্রবন্ধ',
-    title: 'কালেকশন দিয়ে AI-কে দিয়ে কাজ করান',
+    id: 'ai-analyze', icon: Sparkles, tab: 'কালেকশন দিয়ে কাজ', hint: 'সারাংশ, তুলনা, প্রবন্ধ',
+    title: 'জমানো কালেকশন AI-কে দিয়ে কাজে লাগান',
     body: (
       <>
-        <p>কালেকশন পাতায় <strong>Copy as AI context</strong> চেপে AI-তে পেস্ট করুন, তারপর নিচের যেকোনো কাজ বলুন:</p>
+        <p>কালেকশন পাতায় <strong>Copy as AI context</strong> চাপুন, AI-তে পেস্ট করুন, তারপর যা করাতে চান বলুন। কয়েকটা কাজের উদাহরণ:</p>
         <ul className="hgai-list hgai-list--plain">
           <li>উপ-বিষয় অনুযায়ী findings ভাগ করা</li>
           <li>বই-বই তুলনা, মিল ও অমিল টেবিলে</li>
           <li>টাইমলাইন বা টেবিল: বই, পৃষ্ঠা, সারাংশ, লিংক</li>
-          <li>কীওয়ার্ড ও সমার্থক শব্দ বের করা (যেমন আফজাল, শ্রেষ্ঠ, সর্বোত্তম)</li>
+          <li>আরও কোন শব্দে খোঁজা যায় তার তালিকা (যেমন আফজাল, শ্রেষ্ঠ, সর্বোত্তম)</li>
           <li>প্রতিটি finding-এর ২ লাইনের সারাংশ</li>
           <li>পড়ার প্রশ্ন ও কুইজ, উত্তরের পাশে permalink</li>
           <li>permalink-সহ প্রবন্ধের খসড়া</li>
-          <li>ফাঁক খোঁজা: কোন দিক বাদ পড়েছে</li>
-          <li>উত্তরের উদ্ধৃতি verify দিয়ে আবার যাচাই</li>
+          <li>কোন দিকটা এখনো বাদ আছে তা খোঁজা</li>
+          <li>AI-র দেওয়া উদ্ধৃতি verify দিয়ে আবার মিলিয়ে নেওয়া</li>
         </ul>
-        <p className="hgai-note">কাজের ধারা: প্রশ্ন করুন, JSON নিন, পেস্ট করে Verified দেখুন, ভুল বাদ দিন, সেভ করুন, তারপর "Copy as AI context" দিয়ে ফলো-আপ প্রশ্ন করুন।</p>
+        <p className="hgai-note">সাধারণ ধারাটা এরকম: প্রশ্ন করুন, JSON নিন, এখানে পেস্ট করে Verified দেখুন, ভুলগুলো বাদ দিন, সেভ করুন। এরপর "Copy as AI context" দিয়ে পরের প্রশ্ন করুন।</p>
       </>
     ),
     cta: { to: '/my-collections', label: 'My collections' },
     Visual: S4,
   },
   {
-    id: 'ai-files', icon: Terminal, tab: 'ফাইল ও এন্ডপয়েন্ট', hint: 'এজেন্টদের জন্য কাঁচা লিংক',
-    title: 'AI এজেন্টের জন্য প্রস্তুত ফাইল',
+    id: 'ai-files', icon: Terminal, tab: 'এজেন্টের ফাইল', hint: 'কাঁচা টেক্সট লিংক',
+    title: 'AI এজেন্টের জন্য তৈরি ফাইল',
     body: (
       <>
-        <p>সবই সরল টেক্সট, JavaScript লাগে না:</p>
+        <p>সবই সাধারণ টেক্সট, JavaScript লাগে না:</p>
         <ul className="hgai-links">
-          <li><a href="/llms.txt">llms.txt</a><span>শুরুর নির্দেশ ও উত্তরের ফরম্যাট</span></li>
-          <li><a href="/ai-integration/SKILL.md">SKILL.md</a><span>এজেন্টের স্থায়ী নিয়ম</span></li>
-          <li><a href="/index.tsv">index.tsv</a><span>সব বই ও finding-এর তালিকা</span></li>
+          <li><a href="/llms.txt">llms.txt</a><span>শুরুর নির্দেশ আর উত্তরের ফরম্যাট</span></li>
+          <li><a href="/ai-integration/SKILL.md">SKILL.md</a><span>এজেন্টের নিয়মকানুন</span></li>
+          <li><a href="/index.tsv">index.tsv</a><span>সব বই আর finding-এর তালিকা</span></li>
           <li><a href="/openapi.json">openapi.json</a><span>search ও verify API</span></li>
           <li><a href="/synonyms.txt">synonyms.txt</a><span>সমার্থক শব্দের তালিকা</span></li>
         </ul>
-        <p>প্রতিটি বইয়ের টেক্সট ছোট ছোট part-এ ভাগ করা; শেষে <code>NEXT</code> লিংক বা <code>END OF BOOK</code> থাকে, তাই এজেন্ট জানে কখন পুরো বই পড়া হয়েছে।</p>
+        <p>প্রতিটি বই ছোট ছোট part-এ ভাগ করা। প্রতিটির শেষে <code>NEXT</code> লিংক বা <code>END OF BOOK</code> লেখা থাকে, তাই এজেন্ট বুঝতে পারে পুরো বই পড়া হলো কি না।</p><p className="hgai-note">বাংলা শব্দে search করার সময় query অবশ্যই UTF-8 percent-encoded হতে হবে। ফলাফলে <code>next_offset</code> থাকলে সেটা দিয়ে পরের পাতা খুলতে হয়। এই নিয়ম <code>llms.txt</code>-এও লেখা আছে।</p>
       </>
     ),
     cta: { to: '/ai-integration', label: 'AI Integration গাইড দেখুন' },
@@ -881,9 +884,9 @@ export default function Landing() {
         {/* AI agent system (new) */}
         <RevealSection id="ai-agents" className="landing-section hg-section hgai-section bn">
           <p className="hg-eyebrow hgai-eyebrow"><Bot size={13} aria-hidden="true" /> AI এজেন্ট সিস্টেম <em className="hgai-new">নতুন</em></p>
-          <h2 className="hg-heading">AI দিয়ে খুঁজুন, যাচাই করুন, বিশ্লেষণ করুন</h2>
+          <h2 className="hg-heading">AI-কে দিয়ে খোঁজান, যাচাই করান, কাজ করান</h2>
           <p className="hg-intro">
-            ChatGPT, Claude, Gemini বা যেকোনো AI এজেন্ট এখন সরাসরি এই আর্কাইভ পড়তে পারে। কোন ধরনের AI কীভাবে ব্যবহার করবেন, রেডি প্রম্পট, কালেকশন বানানো আর বিশ্লেষণের ধাপ নিচে দেখুন।
+            ChatGPT, Claude, Gemini বা অন্য যেকোনো AI এখন এই সাইটের বই সরাসরি পড়তে পারে। নিচে লেখা আছে কোন AI-কে কী দিতে হবে, কোন প্রম্পট কপি করবেন, আর AI-র দেওয়া উত্তর কীভাবে নিজের কালেকশনে রাখবেন।
           </p>
           <ReaderGuide steps={AI_STEPS} label="AI এজেন্ট কীভাবে ব্যবহার করবেন" variant="hgai" />
         </RevealSection>
