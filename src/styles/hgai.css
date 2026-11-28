@@ -106,3 +106,14 @@
 .hgai-s1__r b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hgai-lb{font-size:.8rem}
 @media(max-width:560px){.hgai-lb{font-size:.86rem}}
+.hg.hgai .hg-panel__visual{min-height:0;padding:.7rem}
+.hg.hgai .hg-vis{max-width:none}
+.lnd-aibadge{position:absolute;right:10px;bottom:10px;z-index:4;display:flex;align-items:center;gap:8px;padding:7px 12px 7px 8px;border-radius:99px;background:color-mix(in srgb,var(--surface,#fff) 92%,transparent);border:1px solid var(--border);box-shadow:0 6px 20px rgba(0,0,0,.14);color:var(--fg);text-decoration:none;backdrop-filter:blur(6px);animation:aibFloat 4.5s ease-in-out infinite}
+.lnd-aibadge:hover{border-color:var(--accent)}
+.lnd-aibadge__logo{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--bg);border:1px solid var(--border)}
+.lnd-aibadge__tx{display:flex;flex-direction:column;line-height:1.2;font-size:12px}.lnd-aibadge__tx small{font-size:10px;color:var(--muted)}
+.lnd-aibadge__id{position:absolute;right:14px;top:-14px;display:inline-flex;gap:3px;align-items:center;padding:2px 8px;border-radius:99px;background:var(--accent);color:#fff;font:600 9px ui-monospace,Menlo,monospace;animation:aibId 4.5s ease-in-out infinite}
+@keyframes aibFloat{50%{transform:translateY(-4px)}}
+@keyframes aibId{0%,30%{opacity:0;transform:translateY(6px)}45%,85%{opacity:1;transform:none}100%{opacity:0}}
+@media (max-width:600px){.lnd-aibadge{right:50%;transform:translateX(50%);bottom:6px;animation:none}.lnd-aibadge__tx small{display:none}}
+@media (prefers-reduced-motion:reduce){.lnd-aibadge,.lnd-aibadge__id{animation:none}.lnd-aibadge__id{opacity:1}}

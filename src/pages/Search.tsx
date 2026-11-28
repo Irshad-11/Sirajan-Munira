@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import {
-  Sparkles, TextSearch, BookOpen, FolderOpen, FileText, RotateCcw, Loader2, Database, RefreshCw, ChevronDown,
+  Sparkles, TextSearch, Fingerprint, BookOpen, FolderOpen, FileText, RotateCcw, Loader2, Database, RefreshCw, ChevronDown,
 } from 'lucide-react';
 import {
   EmbeddingStatus, SearchKind, SearchRow, embedIndex, keywordSearch, semanticSearch,
 } from '../lib/supabase';
 import { useAdmin, useTrackView } from '../lib/context';
 import { Highlighted, splitTerms } from '../lib/highlight';
-import { SearchBox, SEARCH_EXAMPLES } from '../components/SearchBox';
+import { SearchBox } from '../components/SearchBox';
 import { HighAccuracySearch } from '../components/AiBits';
+import { FindById } from '../components/FindById';
+import { extractIds } from '../lib/findingId';
 import { listBooks } from '../lib/supabase';
 import { cacheClearAll, cacheGet, cacheSet, queryKey } from '../lib/searchCache';
 
@@ -250,6 +252,9 @@ export default function SearchPage() {
   const { isAdmin } = useAdmin();
   const [params, setParams] = useSearchParams();
   const q = (params.get('q') || '').trim();
+  const qHasId = extractIds(q).ids.length > 0;
+  const [idOpen, setIdOpen] = useState(qHasId);
+  useEffect(() => { if (qHasId) setIdOpen(true); }, [qHasId]);
   // Keyword is the default (instant, free). Semantic is slower and costs an
   // embedding call, so it only runs when the reader asks for it.
   const tab: Tab = params.get('tab') === 'semantic' ? 'semantic' : 'keyword';
@@ -393,7 +398,7 @@ export default function SearchPage() {
     if (active.status !== 'done' && active.status !== 'error') return;
     restored.current = true;
     const y = savedPos.current?.y;
-    if (y && y > 0) requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, y)));
+    void y; // always start at the top when coming back
   }, [tab, sem.status, kw.status]);
 
   const submit = (next: string) => {
@@ -433,6 +438,8 @@ export default function SearchPage() {
         <h1>Search</h1>
         <p className="muted">Search every finding and collection — by meaning (works best in Bangla) or by exact words.</p>
         <SearchBox initialValue={q} onSubmit={submit} busy={busy} autoFocus={!q} />
+        <button className="link-btn sp-idtoggle" aria-expanded={idOpen} onClick={() => setIdOpen((v) => !v)}><Fingerprint size={14} aria-hidden="true" /> Find by ID · আইডি দিয়ে খুঁজুন</button>
+        {idOpen && <FindById key={qHasId ? q : 'free'} initial={qHasId ? q : ''} autoGo={!qHasId || extractIds(q).ids.length === 1} />}
       </header>
 
       {q && (
@@ -457,12 +464,6 @@ export default function SearchPage() {
               <h2><TextSearch size={15} /> Keyword search</h2>
               <p className="muted">Finds findings, books and collections that contain all of your words. Instant, and the matching words are highlighted.</p>
             </div>
-          </div>
-          <p className="sp-try">Try:</p>
-          <div className="sp-examples">
-            {SEARCH_EXAMPLES.map((ex) => (
-              <button key={ex} type="button" className="sp-example" onClick={() => submit(ex)}>{ex}</button>
-            ))}
           </div>
           {isAdmin && <IndexPanel />}
         </section>
@@ -645,6 +646,7 @@ export default function SearchPage() {
 // ---------------------------------------------------------------------------
 
 const SEARCH_CSS = `
+.sp-idtoggle { display: inline-flex; align-items: center; gap: .35rem; margin: .7rem 0 .8rem; }
 .search-page { max-width: 860px; }
 .sp-head { padding: 0.4rem 0 1rem; }
 .sp-head h1 { margin: 0 0 0.2rem; font-size: 1.5rem; }

@@ -16,6 +16,7 @@ import {
   importLocalStore, listLocal, makeCollection, permalinkFor, saveCollection,
 } from '../lib/collections';
 import { bnFuzzy } from '../lib/bn';
+import { extractIds } from '../lib/findingId';
 
 function downloadText(name: string, text: string) {
   const a = document.createElement('a');
@@ -525,6 +526,20 @@ export function CategoryDetail() {
     const nq = bnFuzzy(fq);
     return !nq || bnFuzzy(`${docToPlainText(r.heading.content)} ${noteOf(r.heading.id)}`).includes(nq);
   });
+  const [addText, setAddText] = useState('');
+  const addByText = async (t: string) => {
+    if (!stored) return;
+    const { ids } = extractIds(t);
+    if (!ids.length) { setToast('No finding ID or link found'); return; }
+    const live = await fetchLive(ids);
+    const have = new Set(stored.items.map((i) => i.id));
+    const fresh = ids.filter((i) => live.has(i) && !have.has(i));
+    const next = { ...stored, items: [...stored.items, ...fresh.map((i) => ({ id: i, addedAt: new Date().toISOString() }))], updatedAt: new Date().toISOString() };
+    if (fresh.length && !saveCollection(next, id === TEMP_ID ? 'temp' : 'local')) { setToast('Storage full — export instead'); return; }
+    setAddText('');
+    if (fresh.length) applyLocal(next);
+    setToast(`${fresh.length} added` + (ids.filter((i) => have.has(i)).length ? ` · ${ids.filter((i) => have.has(i)).length} already here` : '') + (ids.filter((i) => !live.has(i)).length ? ` · ${ids.filter((i) => !live.has(i)).length} not found` : ''));
+  };
   const say = async (t: string, ok: string) => setToast((await copyToClipboard(t)) ? ok : 'Copy failed');
   const liveRows = async () => {
     const live = await fetchLive(items.map((r) => r.heading.id));
@@ -579,6 +594,14 @@ export function CategoryDetail() {
               </div>
             ) : (
               <div className="cd-ai"><AnalyzeWithAI kind="collection" id={category.id} title={category.name} /></div>
+            )}
+            {isLocal && (
+              <div className="cd-filter">
+                <input value={addText} onChange={(e) => setAddText(e.target.value)} placeholder="Add by finding ID or link"
+                  aria-label="Add by finding ID or link" onPaste={(e) => { const t = e.clipboardData.getData('text'); if (t) { e.preventDefault(); addByText(t); } }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') addByText(addText); }} />
+                <button className="link-btn" onClick={() => addByText(addText)}>Add</button>
+              </div>
             )}
             {isLocal && items.length > 0 && (
               <div className="cd-filter">

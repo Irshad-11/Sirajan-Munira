@@ -1043,3 +1043,20 @@ export function requestIndexing(delayMs = 2500) {
     }
   }, delayMs);
 }
+/** Every readable finding id with its book (ids only; used to suggest the nearest valid id after a typo). */
+let findingIndexCache: Promise<{ id: string; book_id: string }[]> | null = null;
+export function listFindingIndex(): Promise<{ id: string; book_id: string }[]> {
+  if (!findingIndexCache) {
+    findingIndexCache = (async () => {
+      const out: { id: string; book_id: string }[] = [];
+      for (let from = 0; from < 200000; from += 1000) {
+        const { data, error } = await supabase.from('headings').select('id, book_id').order('id').range(from, from + 999);
+        if (error) throw error;
+        out.push(...((data as any[]) || []));
+        if (!data || data.length < 1000) break;
+      }
+      return out;
+    })().catch((e) => { findingIndexCache = null; throw e; });
+  }
+  return findingIndexCache;
+}

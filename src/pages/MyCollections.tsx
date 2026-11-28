@@ -14,7 +14,7 @@ import '../styles/coll.css';
 
 const SITE = 'https://sirajan-munira.vercel.app';
 export const COLLECTION_PROMPT = (q: string) =>
-  `আমার প্রশ্ন: ${q}. ${SITE}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি ছোট JSON ব্লকে দাও: {"name": "কালেকশনের নাম", "links": ["permalink 1", "permalink 2"]}। শুধু নাম আর লিংক, আর কিছু না। লিংক নিজে বানাবে না, সাইটে দেখা permalink হুবহু কপি করবে (শেষে #finding-id সহ)। search URL-এ বাংলা query অবশ্যই UTF-8 percent-encoded করবে।`;
+  `আমার প্রশ্ন: ${q}. ${SITE}/llms.txt পড়ে সব বইয়ে খুঁজে প্রাসঙ্গিক সব finding নাও। উত্তর শুধু একটি JSON: {"name":"কালেকশনের নাম","links":["পুরো লিংক (শেষে #id সহ)"]}। লিংক সাইটের ডাটা থেকে হুবহু কপি করবে, বানাবে না; বাংলা অংশ percent-encoded। আর কিছু লিখবে না।`;
 
 function download(name: string, text: string, mime = 'application/json') {
   const a = document.createElement('a');

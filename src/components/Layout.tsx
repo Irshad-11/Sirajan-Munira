@@ -1,3 +1,4 @@
+import { extractIds } from '../lib/findingId';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
@@ -234,7 +235,10 @@ export function NavBar() {
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (q.trim()) navigate(`/search?q=${encodeURIComponent(q.trim())}`);
+    const ids = extractIds(q).ids;
+    if (ids.length === 1) navigate(`/f/${ids[0]}`);
+    else if (q.trim()) navigate(`/search?q=${encodeURIComponent(q.trim())}`);
+    setQ('');
     setMenuOpen(false);
   };
 

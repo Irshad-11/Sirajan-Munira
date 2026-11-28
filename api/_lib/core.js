@@ -130,7 +130,7 @@ function buildFinding(row, book, site, idx) {
     pdf_page_number: row.page_number ?? null,
     first_words: firstWords,
     importance_level: row.importance_level ?? null,
-    permalink: `${site}/book/${book.slug}#${row.id}`,
+    permalink: `${site}/book/${encodeURIComponent(book.slug)}#${row.id}`,
     updated_at: row.updated_at,
     passages,
   };
@@ -180,7 +180,7 @@ const lite = (m) => ({ ...m.book, findings_count: m.findings.length, content_ver
 
 export function bookUrls(site, slug, alias = slug) {
   const base = `${site}/book/${alias}`;
-  return { website: `${site}/book/${slug}`, txt: `${base}.txt`, json: `${base}.json`, download: `${base}/download`, part: (n) => `${base}/part-${n}.txt`, index: (n = 1) => (n === 1 ? `${base}/index.tsv` : `${base}/index-${n}.tsv`), keywords: (n = 1) => (n === 1 ? `${base}/keywords.tsv` : `${base}/keywords-${n}.tsv`) };
+  return { website: `${site}/book/${encodeURIComponent(slug)}`, txt: `${base}.txt`, json: `${base}.json`, download: `${base}/download`, part: (n) => `${base}/part-${n}.txt`, index: (n = 1) => (n === 1 ? `${base}/index.tsv` : `${base}/index-${n}.tsv`), keywords: (n = 1) => (n === 1 ? `${base}/keywords.tsv` : `${base}/keywords-${n}.tsv`) };
 }
 
 // ---------------------------------------------------------------------------
@@ -294,14 +294,15 @@ export function partForFinding(model, k) {
   return chunks.length;
 }
 
+export const shortOf = (t) => String(t || '').trim().split(/\s+/).slice(0, 2).join(' ');
 const INDEX_COLS = '#no\tbook\tid\ttitle\tpdf_page\tfirst_words\tpermalink';
 export function renderIndexPart(model, site, n, nextBookUrl) {
   const b = model.book, u = bookUrls(site, b.slug, b.alias), total = model.findings.length;
-  const lines = model.findings.map((f) => [f.order, b.alias, f.heading_id, clean(f.title), pageOf(f), clean(f.first_words), f.permalink].join('\t'));
+  const lines = model.findings.map((f) => [f.order, b.alias, f.heading_id, clean(f.title), pageOf(f), clean(f.first_words).replace(/\s*…$/, ''), f.permalink].join('\t'));
   const chunks = chunkItems(lines, PART_BYTES, 1200);
   if (!Number.isInteger(n) || n < 1 || n > chunks.length) throw new HttpError(404, `Index part ${n} does not exist; this book index has ${chunks.length} part(s).`);
   let first = 1; for (let i = 0; i < n - 1; i++) first += chunks[i].length;
-  const head = ['# TYPE: finding-index (tab-separated)', `# BOOK: ${b.title} (${b.alias})`, `# CONTENT VERSION: ${model.version.content_version}`,
+  const head = ['# TYPE: finding-index (tab-separated)', `# BOOK: ${b.title} (${b.alias})`, `# SHORT: ${shortOf(b.title)}`, `# CONTENT VERSION: ${model.version.content_version}`,
     `# PART: ${n}/${chunks.length}  ROWS: ${first}-${first + chunks[n - 1].length - 1} of ${total}`, `# FULL TEXT: ${u.part(1)}   KEYWORDS: ${u.keywords(1)}`, INDEX_COLS];
   const foot = n < chunks.length ? `# END OF INDEX PART ${n}/${chunks.length} - NEXT: ${u.index(n + 1)}`
     : nextBookUrl ? `# END OF BOOK INDEX - complete (${total} findings). NEXT BOOK: ${nextBookUrl}` : `# END OF INDEX - complete (last book, ${total} findings)`;
@@ -319,7 +320,7 @@ export function renderKeywordsPart(model, site, n, nextBookUrl) {
     .sort((a, z) => (a[0] < z[0] ? -1 : a[0] > z[0] ? 1 : 0)).map(([w, ids]) => `${w}\t${ids.length}\t${ids.join(',')}`);
   const chunks = chunkItems(lines, PART_BYTES, 1200);
   if (!Number.isInteger(n) || n < 1 || n > chunks.length) throw new HttpError(404, `Keywords part ${n} does not exist; this book has ${chunks.length} part(s).`);
-  const head = ['# TYPE: keyword-index (tab-separated): word <TAB> number-of-findings <TAB> finding numbers (#no in the index file)', `# BOOK: ${b.title} (${b.alias})`,
+  const head = ['# TYPE: keyword-index (tab-separated): word <TAB> number-of-findings <TAB> finding numbers (#no in the index file)', `# BOOK: ${b.title} (${b.alias})`, `# SHORT: ${shortOf(b.title)}`,
     `# CONTENT VERSION: ${model.version.content_version}`, `# PART: ${n}/${chunks.length}. Words are lower-cased exact forms, sorted alphabetically. Bengali inflects (নামাজ, নামাজের, নামাজে): search by PREFIX and try spelling variants; see ${site}/synonyms.txt`,
     `# INDEX: ${u.index(1)}`, '#word\tcount\tfinding_numbers'];
   const foot = n < chunks.length ? `# END OF KEYWORDS PART ${n}/${chunks.length} - NEXT: ${u.keywords(n + 1)}`
@@ -342,12 +343,12 @@ export async function renderMasterIndex(site) {
   const total = counts.reduce((a, c) => a + c, 0);
   const rows = books.map((b, i) => {
     const u = bookUrls(site, b.slug, aliasOf(b));
-    return [aliasOf(b), clean(b.title), clean(b.author || ''), counts[i], u.index(1), u.part(1), u.keywords(1), pickPdf(b.source_links || []) || 'not available'].join('\t');
+    return [aliasOf(b), shortOf(b.title), clean(b.title), clean(b.author || ''), counts[i], u.index(1), u.keywords(1)].join('\t');
   });
   return ['# TYPE: book-list (tab-separated)', `# BOOKS: ${books.length}   FINDINGS: ${total}`,
     '# Each book has: index (one line per finding), full-text parts, keywords. Index files chain: the last part of a book points to the next book, so reading from the first index URL enumerates everything.',
     `# FIRST INDEX: ${books[0] ? bookUrls(site, books[0].slug, aliasOf(books[0])).index(1) : 'none'}   SYNONYMS: ${site}/synonyms.txt   RULES: ${site}/ai-integration/SKILL.md`,
-    '#book\ttitle\tauthor\tfindings\tindex_url\ttext_part1_url\tkeywords_url\toriginal_pdf', ...rows,
+    '#book\tshort\ttitle\tauthor\tfindings\tindex_url\tkeywords_url', ...rows,
     `# END OF BOOK LIST - complete (${books.length} books)`].join('\n') + '\n';
 }
 
@@ -445,24 +446,21 @@ export async function renderLlms(site, docs) {
   const totalFindings = counts.reduce((a, c) => a + (c || 0), 0);
   const version = sha(books.map((b, i) => `${b.id}|${b.updated_at}|${counts[i]}`).join('\n'), 10);
   const L = [];
-  L.push('# Sirājan Munīrā', '', `> Archive of Bengali research findings from original Arabic/Urdu books. ${books.length} books, ${totalFindings} findings. Every finding has a permalink and the original-PDF page number.`, '',
-    `CONTENT VERSION: ${version}`, '', docs.answerFormat(site, ex), '', docs.tiers(site), '',
+  L.push('# Sirājan Munīrā', '', `> Archive of Bengali research findings from original Arabic/Urdu books. ${books.length} books, ${totalFindings} findings, each with an id and the original-PDF page.`, '', docs.answerFormat(site, ex), '', docs.tiers(site), '',
     '## Start here (static files, no query building needed)',
     `- ${site}/index.tsv — list of all books with their index / text / keyword URLs (read this first)`,
-    `- ${ai}/SKILL.md — full working method`, `- ${ai}/SEARCH.md — search methods`, `- ${ai}/CITATION.md — citation format`, `- ${site}/synonyms.txt — synonym groups for searching`,
-    `- ${site}/openapi.json — API description for custom GPTs / agents`, '',
+    `- ${site}/synonyms.txt — synonym groups for searching`, `- ${site}/openapi.json — API description for custom GPTs / agents`, '',
     `## Books (${books.length})`);
   books.forEach((b, i) => {
     const u = bookUrls(site, b.slug, aliasOf(b));
-    L.push(`- ${b.title}${b.author ? ` — ${b.author}` : ''}${counts[i] != null ? ` — ${counts[i]} findings` : ''}`,
-      `  - index (one line per finding): ${u.index(1)}`, `  - keywords: ${u.keywords(1)}`, `  - full text, part 1 (parts of ~60 KB, each ends with an END marker): ${u.part(1)}`,
-      `  - JSON: ${u.json}`, `  - original source PDF: ${pickPdf(b.source_links || []) || 'not available'}`, `  - website: ${u.website}`);
+    L.push(`- ${b.title} (short: ${shortOf(b.title)})${b.author && b.author !== 'লেখক' ? ` — ${b.author}` : ''}${counts[i] != null ? ` — ${counts[i]} findings` : ''}`,
+      `  - index: ${u.index(1)}`, `  - keywords: ${u.keywords(1)}`);
   });
   if (cats.length) {
     L.push('', `## Topic collections (${cats.length})`);
     cats.forEach((c, i) => L.push(`- ${c.name}${ccounts[i] != null ? ` — ${ccounts[i]} findings` : ''}: ${site}/collections/${c.id}.txt  (JSON: ${site}/collections/${c.id}.json)`));
   }
-  L.push('', '## Live search API (only if your tool can call URLs you construct)', `- ${ai}/search?q=<query>&mode=auto|exact|keyword|semantic&book=<book-key>&limit=20`, `- ${ai}/verify?text=<quoted text>&book=<book-key>`, `- One finding as text: ${site}/f/<id>.txt`, '', 'END OF LLMS.TXT - complete', '');
+  L.push('', `Per book (key = folder name above): ${site}/book/<key>/part-N.txt (full text, ~60 KB parts), ${site}/book/<key>.json. One finding: ${site}/f/<id>.txt. Details and live search API: ${ai}/SKILL.md`, '', 'END OF LLMS.TXT - complete', '');
   return L.join('\n');
 }
 

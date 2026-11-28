@@ -8,6 +8,7 @@
 import { Book, CategoryHeadingDetail, Heading, getHeadingsByIds, listBooks } from './supabase';
 import { docToPlainText } from './richtext';
 import { bnFuzzy, bnWords } from './bn';
+import { extractIds } from './findingId';
 
 export const SCHEMA = 'sirajan-collection/1';
 export const MAX_BYTES = 1_000_000;
@@ -95,7 +96,12 @@ export function parseCollectionJson(input: string): ParseResult {
   for (const c of candidates(input)) {
     try { data = JSON.parse(c.text); note = c.note; break; } catch (e) { firstErr ||= jsonError(e, c.text === input ? input : c.text); }
   }
-  if (data === undefined) { res.errors.push(firstErr!); return res; }
+  if (data === undefined) {
+    // Not JSON at all (a plain list of ids / links / a whole AI answer): take every finding id found in the text.
+    const found = extractIds(input).ids;
+    if (found.length) { data = found; note = { en: 'Not JSON — read every finding ID found in the text.', bn: 'JSON নয় — লেখার ভেতরের সব finding ID নেওয়া হয়েছে।' }; }
+    else { res.errors.push(firstErr!); return res; }
+  }
   if (note) res.notes.push(note);
 
   let items: unknown;
@@ -117,7 +123,10 @@ export function parseCollectionJson(input: string): ParseResult {
 
   const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : typeof v === 'number' ? String(v) : undefined);
   res.items = (items as any[]).map((it) => {
-    if (typeof it === 'string') return { url: it.slice(0, 2000) };
+    if (typeof it === 'string') {
+      const m = !/^https?:/i.test(it.trim()) && it.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      return m ? { id: m[0].toLowerCase() } : { url: it.slice(0, 2000) };
+    }
     if (!it || typeof it !== 'object') return {};
     // AIs often write "permalink" (the prompt says "full permalink"); accept the usual aliases for url.
     const urlLike = it.url ?? it.permalink ?? it.link ?? it.href;

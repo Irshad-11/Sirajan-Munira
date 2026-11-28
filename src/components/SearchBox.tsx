@@ -4,10 +4,10 @@ import { Search as SearchIcon, X, ArrowRight } from 'lucide-react';
 // Example queries typed out in the empty field — they double as a hint that
 // both Bangla and English, and both exact words and ideas, are searchable.
 export const SEARCH_EXAMPLES = [
-  'গাদীর-ই-খুম এবং ইসলাম পরিপূর্ন হওয়ার আয়াত',
-  'আলীর ইমামত ও বেলায়াত',
-  'আহলে বাইত রিসালাতের এবং জ্ঞানের উৎসস্থল',
-  'আমার পক্ষ থেকে আমার দায়িত্ব পৌঁছে দেবে না, আলী ছাড়া।',
+  'Try something here to search',
+  'Powerful Search option available',
+  'Search by meaning or by exact words',
+  'Bangla and English both work',
 ];
 
 function usePrefersReducedMotion() {

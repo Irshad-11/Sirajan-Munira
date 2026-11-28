@@ -5,7 +5,7 @@ import {
   Inbox as InboxIcon, ArrowRight, Star, Plus, Pencil, Trash2, X, ArrowUpRight,
   ScrollText, Archive, HardDrive, Library, Languages, Sparkles, UserRound, CalendarDays, Lightbulb, Compass,
   Link2, Hash, Code, Wrench, Feather, Mail, FileText, BookCopy, Send, ListChecks,
-  Bot, Copy, Check, Braces, AlertTriangle, Table2, GitCompare, ClipboardPaste, FileJson, Terminal, Cpu, Upload, Globe2, ScanSearch, Layers,
+  Bot, Fingerprint, Copy, Check, Braces, AlertTriangle, Table2, GitCompare, ClipboardPaste, FileJson, Terminal, Cpu, Upload, Globe2, ScanSearch, Layers,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAdmin, useTrackView } from '../lib/context';
@@ -16,7 +16,9 @@ import { CuratorNote } from '../components/Disclaimer';
 import { AuthorQuote } from '../components/AuthorQuote';
 import { copyToClipboard } from '../lib/richtext';
 import { siteOrigin } from '../lib/ai';
+import { AiLogoCycle } from '../components/AiBits';
 import '../styles/hgai.css';
+import { ReplicaAsk, ReplicaChat, ReplicaReply, ReplicaFind, ReplicaCollect } from '../components/AiReplica';
 
 // ---------------------------------------------------------------------------
 // Animated hero: lamp + book scene (artwork + GSAP timeline in
@@ -428,11 +430,11 @@ function CopyChip({ text, label, icon: Icon }: { text: string; label: string; ic
     <div className="hgai-prompt">
       <div className="hgai-prompt__head">
         <span className="hgai-prompt__label">{Icon && <Icon size={15} aria-hidden="true" />} {label}</span>
-        <button type="button" onClick={async () => { if (await copyToClipboard(text)) { setOk(true); window.setTimeout(() => setOk(false), 1800); } }} aria-label={`${label} — সম্পূর্ণ প্রম্পট কপি করুন`}>
+        <button type="button" onClick={async () => { if (await copyToClipboard(text)) { setOk(true); window.setTimeout(() => setOk(false), 1800); } }} aria-label={`${label} — পুরো prompt Copy করুন`}>
           {ok ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />} {ok ? 'কপি হয়েছে' : 'কপি'}
         </button>
       </div>
-      <p className="hgai-prompt__text" title="সম্পূর্ণ প্রম্পট কপি হবে">{text}</p>
+      <p className="hgai-prompt__text" title="পুরো prompt Copy হবে">{text}</p>
     </div>
   );
 }
@@ -443,7 +445,7 @@ function PromptLab() {
   const [topic, setTopic] = useState('');
   const [book, setBook] = useState('');
   const [quote, setQuote] = useState('');
-  const t = topic.trim() || '[এখানে বিষয় লিখুন]';
+  const t = topic.trim() || '[এখানে topic লিখুন]';
   const bk = book.trim() || '[বইয়ের নাম]';
   const qt = quote.trim() || '[এখানে বাক্যটি পেস্ট করুন]';
   const o = O();
@@ -451,21 +453,21 @@ function PromptLab() {
   return (
     <>
       <label className="hgai-field">
-        <span><ScanSearch size={14} aria-hidden="true" /> আপনার প্রশ্ন বা বিষয়</span>
+        <span><ScanSearch size={14} aria-hidden="true" /> আপনার topic</span>
         <textarea rows={2} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="যেমন: আফজাল আমল" />
       </label>
       <label className="hgai-field">
-        <span><BookOpen size={14} aria-hidden="true" /> বইয়ের নাম (শুধু একটি বইয়ে খুঁজলে)</span>
+        <span><BookOpen size={14} aria-hidden="true" /> বইয়ের নাম (শুধু একটা বইয়ে খুঁজলে)</span>
         <input value={book} onChange={(e) => setBook(e.target.value)} placeholder="বইয়ের নাম" />
       </label>
       <label className="hgai-field">
-        <span><Hash size={14} aria-hidden="true" /> যাচাই করতে চাওয়া বাক্য</span>
+        <span><Hash size={14} aria-hidden="true" /> Verify করতে চাওয়া বাক্য</span>
         <textarea rows={2} value={quote} onChange={(e) => setQuote(e.target.value)} placeholder="বাক্যটি পেস্ট করুন" />
       </label>
-      <CopyChip icon={Globe2} label="সব বইয়ে খুঁজুন" text={`আমার প্রশ্ন: ${t}. ${o}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো।${enc ? ` প্রথমে এই তৈরি-করা search লিংকটা খোলো (বাংলা আগেই encode করা): ${enc} — উত্তরে next_offset থাকলে &offset=<সেই সংখ্যা> যোগ করে বাকি পাতাও পড়ো।` : ''} প্রতিটির ফুল permalink, বই, PDF পৃষ্ঠা ও শুরুর কথা দাও। শেষে বলো কতটি finding পড়েছ।`} />
-      <CopyChip icon={BookOpen} label="একটি বইয়ের ভেতরে" text={`${o}/llms.txt পড়ো। তারপর শুধু "${bk}" বইয়ের index.tsv ও part-ফাইলগুলো (শেষে END OF BOOK পর্যন্ত) পড়ে "${t}" সম্পর্কিত সব finding দাও, permalink ও PDF পৃষ্ঠা সহ।`} />
-      <CopyChip icon={FileJson} label="কালেকশন JSON" text={`আমার প্রশ্ন: ${t}. ${o}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি ছোট JSON ব্লকে দাও: {"name": "কালেকশনের নাম", "links": ["permalink"]}। শুধু নাম আর হুবহু permalink, আর কিছু না।`} />
-      <CopyChip icon={ShieldCheck} label="উদ্ধৃতি যাচাই" text={`${o}/llms.txt পড়ো। নিচের বাক্যটি সাইটের কোন finding-এ আছে খুঁজে দাও (verify endpoint ব্যবহার করে)। পাওয়া গেলে permalink, বই, PDF পৃষ্ঠা দাও; না পেলে স্পষ্ট বলো "পাওয়া যায়নি"।\n\nবাক্য: ${qt}`} />
+      <CopyChip icon={Globe2} label="সব বইয়ে Search" text={`${o}/llms.txt পড়ো। সব বইয়ে "${t}" সম্পর্কে যা আছে দাও।${enc ? ` প্রথমে এই লিংক খোলো (আগেই encode করা): ${enc} — next_offset থাকলে &offset=<সংখ্যা> দিয়ে শেষ পর্যন্ত পড়ো।` : ''} শুধু বইয়ের কথা; ছোট উপশিরোনামের নিচে প্রতি finding এক লাইনে: “ছোট উদ্ধৃতি” (বইয়ের নামের প্রথম ১–২ শব্দ, p.PDF-পৃষ্ঠা) → ৩৬-অক্ষরের পুরো id। URL, ভূমিকা, সতর্কবাণী নয়।`} />
+      <CopyChip icon={BookOpen} label="একটা বইয়ের ভেতরে" text={`${o}/llms.txt পড়ো। শুধু "${bk}" বইয়ের index.tsv ও keywords.tsv (শেষ পর্যন্ত) দেখে "${t}" সম্পর্কিত সব finding দাও: উপশিরোনামের নিচে এক লাইনে “উদ্ধৃতি” (বইয়ের নামের প্রথম ১–২ শব্দ, p.PDF-পৃষ্ঠা) → পুরো id। URL ও সতর্কবাণী নয়।`} />
+      <CopyChip icon={FileJson} label="Collection JSON" text={P_JSON(t)} />
+      <CopyChip icon={ShieldCheck} label="Quote Verify" text={`${o}/llms.txt পড়ো। verify endpoint দিয়ে (বাক্য percent-encode করে) খুঁজে বলো নিচের বাক্য কোন finding-এ আছে: এক লাইনে “উদ্ধৃতি” (বইয়ের নামের প্রথম ১–২ শব্দ, p.PDF-পৃষ্ঠা) → পুরো id। না পেলে শুধু "পাওয়া যায়নি"।\n\nবাক্য: ${qt}`} />
     </>
   );
 }
@@ -526,93 +528,66 @@ const S5 = () => (<Scene><div className="hgai-s hgai-s5" aria-hidden="true">
   <i className="hgai-s5__beam" /><Ic I={Bot} c="hgai-s5__bot" />
 </div></Scene>);
 
-const P_JSON = () => `আমার প্রশ্ন: [এখানে প্রশ্ন]. ${O()}/llms.txt পড়ে সব বই খুঁজে সব প্রাসঙ্গিক finding বের করো। উত্তর শুধু একটি ছোট JSON ব্লকে দাও: {"name": "কালেকশনের নাম", "links": ["permalink"]}। শুধু নাম আর হুবহু permalink (শেষে #finding-id সহ), আর কিছু না। লিংক নিজে বানাবে না। search URL-এ বাংলা query UTF-8 percent-encoded করবে।`;
+const P_JSON = (q = '[এখানে প্রশ্ন]') => `আমার প্রশ্ন: ${q}. ${O()}/llms.txt পড়ে সব বইয়ে খুঁজে প্রাসঙ্গিক সব finding নাও। উত্তর শুধু একটি JSON: {"name":"কালেকশনের নাম","links":["পুরো লিংক (শেষে #id সহ)"]}। লিংক সাইটের ডাটা থেকে হুবহু কপি করবে, বানাবে না; বাংলা অংশ percent-encoded। আর কিছু লিখবে না।`;
 
 const AI_STEPS: GuideStep[] = [
   {
-    id: 'ai-ways', icon: Bot, tab: 'কোন AI-কে কী দেবেন', hint: 'AI-র ধরন অনুযায়ী উপায়',
-    title: 'আপনার AI যেটাই হোক, কাজ চালানো যায়',
+    id: 'ai-ask', icon: Search, tab: '১. Topic লিখুন', hint: 'কোন বইয়ে খুঁজবে সেটা বাছুন',
+    title: 'Topic লিখুন, বই বাছুন',
     body: (
       <>
-        <p>সাইট AI-র জন্য সাধারণ টেক্সট ফাইল দেয়, তাই নিচের সব ধরনের AI-ই কাজ করতে পারে। শুধু ধরন অনুযায়ী দেওয়ার জিনিসটা আলাদা।</p>
-        <ul className="hgai-list">
-          <li><Globe2 size={15} aria-hidden="true" /><span><b>ব্রাউজিং আছে</b> (ChatGPT, Claude, Gemini-এর web সার্চ): প্রম্পট কপি করে পেস্ট করুন। AI নিজে <code>llms.txt</code> খুলে বই খুঁজে নেবে।</span></li>
-          <li><Upload size={15} aria-hidden="true" /><span><b>ব্রাউজিং নেই:</b> বইয়ের পাতা থেকে TXT বা JSON নামিয়ে AI-তে আপলোড করুন, তারপর প্রশ্ন করুন।</span></li>
-          <li><Layers size={15} aria-hidden="true" /><span><b>Projects / Custom GPT / Gems / NotebookLM:</b> <code>SKILL.md</code> আর বইয়ের ফাইল একবার যোগ করে রাখুন, পরে প্রতিবার নতুন করে বলতে হবে না।</span></li>
-          <li><Terminal size={15} aria-hidden="true" /><span><b>কোডিং এজেন্ট</b> (Claude Code, Codex ইত্যাদি): <code>openapi.json</code> আর <code>index.tsv</code> দিন। এরা search, verify আর part-ফাইল নিজেই চালায়।</span></li>
-          <li><Cpu size={15} aria-hidden="true" /><span><b>লোকাল মডেল:</b> এদের মনে রাখার জায়গা কম। একবারে ২০–৩০টির বেশি finding দেবেন না।</span></li>
-        </ul>
-      </>
-    ),
-    cta: { to: '/ai-integration', label: 'পূর্ণ AI Integration গাইড' },
-    Visual: S1,
-  },
-  {
-    id: 'ai-prompts', icon: Copy, tab: 'প্রম্পট বানান', hint: 'লিখুন, কপি করুন, পেস্ট করুন',
-    title: 'প্রম্পট কপি করুন, AI-তে পেস্ট করুন',
-    body: (
-      <>
-        <p>প্রশ্নটা লিখলেই প্রম্পটগুলো সেই অনুযায়ী বদলে যায়। এখানে শুধু শুরুর দুই লাইন দেখাচ্ছে, কিন্তু <strong>কপি</strong> চাপলে পুরোটাই কপি হবে।</p><p className="hgai-note">বাংলা লেখা URL-এ সরাসরি বসালে অনেক AI লিংক খুলতে পারে না। তাই বানানো প্রম্পটে search লিংকটা আগেই encode করা থাকে।</p>
+        <p>যে topic জানতে চান সেটা লিখুন। এক বই, কয়েকটা বই বা সব বই, যেটায় খুঁজতে চান সেটা বাছুন। Prompt নিজেই বানিয়ে দেবে, শুধু Copy চাপুন।</p>
         <PromptLab />
       </>
     ),
-    cta: { to: '/search', label: 'Search with High Accuracy' },
-    Visual: S2,
+    cta: { to: '/books', label: 'বইগুলো দেখুন' },
+    Visual: ReplicaAsk,
   },
   {
-    id: 'ai-collect', icon: FileJson, tab: 'কালেকশন বানান', hint: 'AI-র JSON সাইটে মিলিয়ে নিন',
-    title: 'AI-র উত্তর থেকে নিজের কালেকশন',
+    id: 'ai-paste', icon: Bot, tab: '২. AI-তে paste', hint: 'ChatGPT বা Claude',
+    title: 'ChatGPT বা Claude-এ paste করুন',
     body: (
       <>
-        <p>AI-কে JSON-এ উত্তর দিতে বলুন, তারপর <Link to="/collections/import">Import collection</Link> পাতায় পেস্ট করুন। সাইট প্রতিটি item ডাটাবেসের সঙ্গে মিলিয়ে <strong>Verified</strong> বা <strong>Check</strong> দেখায়। না মিললে "AI বলেছে" আর "সাইটে আছে" পাশাপাশি দেখা যায়। কোনো item বাতিল হলে পাতাতেই কারণ আর সমাধান লেখা থাকে।</p>
-        <CopyChip label="কালেকশন JSON প্রম্পট" text={P_JSON()} />
-        <p>সেভ করা যায় দুই জায়গায়: <strong>Temporary</strong> (শুধু এই ট্যাবে) অথবা <strong>Local</strong> (এই ডিভাইসে, Export করে ব্যাকআপও রাখা যায়)। সেভ করা কালেকশন <Link to="/collections">Collections</Link> পেজের “On this device” অংশে পাবেন।</p>
+        <p>ChatGPT বা Claude খুলে message box-এ paste করে send দিন। ফোনে box-এ ট্যাপ করে ধরে রাখলে Paste আসবে। বাকিটা AI নিজেই সাইট থেকে পড়ে নেবে।</p>
+        <p className="hgai-note">AI-র web browsing চালু থাকতে হবে। না থাকলে বইয়ের পাতা থেকে TXT নামিয়ে AI-তে upload করুন।</p>
+      </>
+    ),
+    cta: { to: '/ai-integration', label: 'আরও উপায়' },
+    Visual: ReplicaChat,
+  },
+  {
+    id: 'ai-reply', icon: FileText, tab: '৩. Reply-তে ID', hint: 'প্রতি লাইনের শেষে একটা ID',
+    title: 'প্রতি লাইনের শেষে একটা ID',
+    body: (
+      <>
+        <p>AI উত্তরটা heading ধরে সাজিয়ে দেবে। প্রতি লাইনে থাকবে ছোট quote, বইয়ের নাম, পৃষ্ঠা আর শেষে একটা ID। যেটা দেখতে চান তার ID copy করুন।</p>
+      </>
+    ),
+    cta: { to: '/search', label: 'Search' },
+    Visual: ReplicaReply,
+  },
+  {
+    id: 'ai-find', icon: Fingerprint, tab: '৪. ID দিয়ে খুঁজুন', hint: 'Search-এ paste করুন',
+    title: 'ID paste করলেই সেই heading খুলবে',
+    body: (
+      <>
+        <p>Search box বা Quick search-এ ID paste করুন। সাইট বইয়ের ঠিক সেই heading-এ নিয়ে গিয়ে highlight করে দেবে। ID-তে ভুল থাকলে কাছাকাছি ID suggest করবে।</p>
+      </>
+    ),
+    cta: { to: '/search', label: 'Find by ID', primary: true },
+    Visual: ReplicaFind,
+  },
+  {
+    id: 'ai-collect', icon: FolderOpen, tab: '৫. Collection বানান', hint: 'সব হাদিস এক জায়গায়',
+    title: 'Topic-এর সব হাদিস collection-এ রাখুন',
+    body: (
+      <>
+        <p>AI-কে collection-এর নাম আর link-এর JSON দিতে বলুন। সেটা <Link to="/collections/import">Import</Link> পাতায় paste করুন। প্রতিটা item Verified হলে Save দিন, collection আপনার ডিভাইসে থেকে যাবে।</p>
+        <CopyChip label="Collection JSON prompt" text={P_JSON()} />
       </>
     ),
     cta: { to: '/collections/import', label: 'Import collection', primary: true },
-    Visual: S3,
-  },
-  {
-    id: 'ai-analyze', icon: Sparkles, tab: 'কালেকশন দিয়ে কাজ', hint: 'সারাংশ, তুলনা, প্রবন্ধ',
-    title: 'জমানো কালেকশন AI-কে দিয়ে কাজে লাগান',
-    body: (
-      <>
-        <p>কালেকশন পাতার লিংকগুলো AI-কে দিন, তারপর যা করাতে চান বলুন। কয়েকটা কাজের উদাহরণ:</p>
-        <ul className="hgai-list hgai-list--plain">
-          <li>উপ-বিষয় অনুযায়ী findings ভাগ করা</li>
-          <li>বই-বই তুলনা, মিল ও অমিল টেবিলে</li>
-          <li>টাইমলাইন বা টেবিল: বই, পৃষ্ঠা, সারাংশ, লিংক</li>
-          <li>আরও কোন শব্দে খোঁজা যায় তার তালিকা (যেমন আফজাল, শ্রেষ্ঠ, সর্বোত্তম)</li>
-          <li>প্রতিটি finding-এর ২ লাইনের সারাংশ</li>
-          <li>পড়ার প্রশ্ন ও কুইজ, উত্তরের পাশে permalink</li>
-          <li>permalink-সহ প্রবন্ধের খসড়া</li>
-          <li>কোন দিকটা এখনো বাদ আছে তা খোঁজা</li>
-          <li>AI-র দেওয়া উদ্ধৃতি verify দিয়ে আবার মিলিয়ে নেওয়া</li>
-        </ul>
-        <p className="hgai-note">সাধারণ ধারাটা এরকম: প্রশ্ন করুন, JSON নিন, এখানে পেস্ট করে Verified দেখুন, ভুলগুলো বাদ দিন, সেভ করুন। </p>
-      </>
-    ),
-    cta: { to: '/collections', label: 'Collections' },
-    Visual: S4,
-  },
-  {
-    id: 'ai-files', icon: Terminal, tab: 'এজেন্টের ফাইল', hint: 'কাঁচা টেক্সট লিংক',
-    title: 'AI এজেন্টের জন্য তৈরি ফাইল',
-    body: (
-      <>
-        <p>সবই সাধারণ টেক্সট, JavaScript লাগে না:</p>
-        <ul className="hgai-links">
-          <li><a href="/llms.txt">llms.txt</a><span>শুরুর নির্দেশ আর উত্তরের ফরম্যাট</span></li>
-          <li><a href="/ai-integration/SKILL.md">SKILL.md</a><span>এজেন্টের নিয়মকানুন</span></li>
-          <li><a href="/index.tsv">index.tsv</a><span>সব বই আর finding-এর তালিকা</span></li>
-          <li><a href="/openapi.json">openapi.json</a><span>search ও verify API</span></li>
-          <li><a href="/synonyms.txt">synonyms.txt</a><span>সমার্থক শব্দের তালিকা</span></li>
-        </ul>
-        <p>প্রতিটি বই ছোট ছোট part-এ ভাগ করা। প্রতিটির শেষে <code>NEXT</code> লিংক বা <code>END OF BOOK</code> লেখা থাকে, তাই এজেন্ট বুঝতে পারে পুরো বই পড়া হলো কি না।</p><p className="hgai-note">বাংলা শব্দে search করার সময় query অবশ্যই UTF-8 percent-encoded হতে হবে। ফলাফলে <code>next_offset</code> থাকলে সেটা দিয়ে পরের পাতা খুলতে হয়। এই নিয়ম <code>llms.txt</code>-এও লেখা আছে।</p>
-      </>
-    ),
-    cta: { to: '/ai-integration', label: 'AI Integration গাইড দেখুন' },
-    Visual: S5,
+    Visual: ReplicaCollect,
   },
 ];
 
@@ -853,7 +828,14 @@ export default function Landing() {
             <Link to="/collections" className="cta-secondary"><FolderOpen size={16} /> Collections</Link>
           </div>
         </div>
-        <div className="lnd-hero__right"><AnimatedHeroScene /></div>
+        <div className="lnd-hero__right">
+          <AnimatedHeroScene />
+          <a className="lnd-aibadge" href="/#ai-agents" onClick={(e) => { const el = document.getElementById('ai-agents'); if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }} aria-label="AI Agent ফিচার দেখুন">
+            <span className="lnd-aibadge__logo"><AiLogoCycle size={16} /></span>
+            <span className="lnd-aibadge__tx"><b>AI Agent</b><small>ChatGPT / Claude দিয়ে Search</small></span>
+            <span className="lnd-aibadge__id" aria-hidden="true"><Fingerprint size={10} /> 4b7d2e91…</span>
+          </a>
+        </div>
       </div>
 
       {/* Stats */}
@@ -883,12 +865,12 @@ export default function Landing() {
 
         {/* AI agent system (new) */}
         <RevealSection id="ai-agents" className="landing-section hg-section hgai-section bn">
-          <p className="hg-eyebrow hgai-eyebrow"><Bot size={13} aria-hidden="true" /> AI এজেন্ট সিস্টেম <em className="hgai-new">নতুন</em></p>
-          <h2 className="hg-heading">AI-কে দিয়ে খোঁজান, যাচাই করান, কাজ করান</h2>
+          <p className="hg-eyebrow hgai-eyebrow"><Bot size={13} aria-hidden="true" /> AI Agent <em className="hgai-new">New</em></p>
+          <h2 className="hg-heading">ChatGPT বা Claude দিয়ে খুঁজুন</h2>
           <p className="hg-intro">
-            ChatGPT, Claude, Gemini বা অন্য যেকোনো AI এখন এই সাইটের বই সরাসরি পড়তে পারে। নিচে লেখা আছে কোন AI-কে কী দিতে হবে, কোন প্রম্পট কপি করবেন, আর AI-র দেওয়া উত্তর কীভাবে নিজের কালেকশনে রাখবেন।
+            কোনো topic নিয়ে কোন বইয়ে কী লেখা আছে, ChatGPT বা Claude দিয়ে খুঁজে নিন। AI যে ID দেবে সেটা এই সাইটের Search-এ Paste করলেই আসল হাদিস খুলে যাবে। পাঁচ ধাপে দেখে নিন।
           </p>
-          <ReaderGuide steps={AI_STEPS} label="AI এজেন্ট কীভাবে ব্যবহার করবেন" variant="hgai" />
+          <ReaderGuide steps={AI_STEPS} label="AI Agent কীভাবে ব্যবহার করবেন" variant="hgai" />
         </RevealSection>
 
         {/* Newest books */}
@@ -1007,7 +989,7 @@ const LANDING_CSS = `
 @media(max-width:600px){ .lnd-search{ margin-left:auto; margin-right:auto; width:100%; } .lnd-search-hint{ text-align:center; } .lnd-hero .hero-cta{ justify-content:center; } .lnd-hero__left{ width:100%; } }
 .lnd-hero { display:flex; align-items:center; justify-content:space-between; gap:1.5rem; flex-wrap:wrap; text-align:left; padding:3.5rem 1.4rem 2.8rem; }
 .lnd-hero__left { max-width:480px; }
-.lnd-hero__right { flex:1 1 380px; min-width:0; max-width:734px; }
+.lnd-hero__right { flex:1 1 380px; min-width:0; max-width:734px; position:relative; }
 .lnd-scene-ph { width:100%; aspect-ratio:13.84/7.1; }
 /* Desktop: the scene may grow past the 1080px column, out to the screen's right edge */
 @media(min-width:1081px){ .lnd-hero{ flex-wrap:nowrap; } .lnd-hero__left{ flex:0 0 auto; }

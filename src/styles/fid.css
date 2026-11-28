@@ -1,0 +1,46 @@
+.fid { margin: 0 0 1.2rem; }
+.fid-box { position: relative; display: flex; align-items: center; gap: .6rem; padding: .35rem .7rem; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: hidden; transition: border-color .2s, box-shadow .25s; }
+.fid-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent); }
+.fid-ic { flex: none; color: var(--accent); }
+.fid-box textarea { flex: 1; min-width: 0; border: 0; outline: 0; resize: none; background: transparent; color: var(--fg); font: inherit; font-size: .92rem; line-height: 1.5; padding: .4rem 0; max-height: 110px; overflow-y: auto; }
+.fid-x { flex: none; border: 0; background: none; color: var(--muted); cursor: pointer; padding: .2rem; border-radius: 6px; }
+.fid-scan { position: absolute; left: 0; bottom: 0; height: 2px; width: 35%; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0; transform: translateX(-100%); }
+.fid.is-busy .fid-scan { opacity: 1; animation: fidScan 1.1s ease-in-out infinite; }
+@keyframes fidScan { to { transform: translateX(300%); } }
+.fid-row { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-top: .6rem; flex-wrap: wrap; }
+.fid-chk { display: inline-flex; align-items: center; gap: .5rem; font-size: .85rem; cursor: pointer; }
+.fid-go { display: inline-flex; align-items: center; gap: .4rem; min-height: 40px; padding: 0 1.1rem; border: 0; border-radius: 999px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; transition: transform .15s, opacity .15s; }
+.fid-go:hover:not(:disabled) { transform: translateY(-1px); } .fid-go:disabled { opacity: .5; cursor: default; }
+.fid-spin { animation: fidSpin .8s linear infinite; } @keyframes fidSpin { to { transform: rotate(360deg); } }
+.fid-out { margin-top: .9rem; }
+.fid-status { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: .88rem; color: var(--muted); animation: fidIn .25s both; }
+.fid-sub { margin: .4rem 0; font-size: .82rem; color: var(--muted); }
+.fid-found, .fid-miss { animation: fidIn .35s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes fidIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.fid-ok { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; flex-wrap: wrap; }
+.fid-ring { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-dasharray: 66; stroke-dashoffset: 66; animation: fidDraw .5s .05s forwards; }
+.fid-tick { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 16; stroke-dashoffset: 16; animation: fidDraw .35s .45s forwards; }
+@keyframes fidDraw { to { stroke-dashoffset: 0; } }
+.fid-card { display: flex; align-items: center; gap: .8rem; padding: .75rem .85rem; margin-bottom: .55rem; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); animation: fidIn .35s both; }
+.fid-cb { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.fid-cm { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .15rem; }
+.fid-ct { font-size: .95rem; overflow-wrap: anywhere; } .fid-cs { font-size: .78rem; color: var(--muted); }
+.fid-id { font-size: .72rem; color: var(--muted); word-break: break-all; font-family: ui-monospace, Menlo, monospace; }
+.fid-d { color: #c0392b; font-weight: 700; text-decoration: underline; }
+.fid-open { flex: none; display: inline-flex; align-items: center; gap: .3rem; min-height: 38px; padding: 0 .9rem; border: 1px solid var(--accent); border-radius: 999px; background: transparent; color: var(--accent); font: inherit; font-size: .85rem; cursor: pointer; transition: background .15s, color .15s; }
+.fid-open:hover { background: var(--accent); color: #fff; }
+.fid-prog { height: 3px; margin: .2rem 0 .3rem; border-radius: 3px; background: color-mix(in srgb, var(--accent) 15%, transparent); overflow: hidden; }
+.fid-prog i { display: block; height: 100%; width: 0; background: var(--accent); animation: fidProg .7s linear forwards; }
+@keyframes fidProg { to { width: 100%; } }
+.fid-link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
+.fid-mh { display: flex; align-items: center; gap: .4rem; margin: .2rem 0; font-size: .88rem; flex-wrap: wrap; } .fid-mh code { word-break: break-all; font-size: .8rem; }
+@media (max-width: 560px) { .fid-card { flex-wrap: wrap; } .fid-open { width: 100%; justify-content: center; } }
+@media (prefers-reduced-motion: reduce) { .fid *, .fid { animation-duration: .01ms !important; } }
+
+.fid-block { display: block; } .fid-block code { word-break: break-all; }
+.fid-chk { min-height: 40px; } .fid-chk input { accent-color: var(--accent); }
+.fid-x { min-width: 40px; min-height: 40px; display: grid; place-items: center; margin: -.3rem -.4rem 0 0; }
+.fid-link { min-height: 40px; padding: 0 .4rem; } .fid-open { min-height: 40px; }
+.fid-id, .fid-cs { color: color-mix(in srgb, var(--fg) 70%, var(--bg)); } .fid-cs { font-size: .8rem; } .fid-id { font-size: .75rem; }
+.fid-opts { display: inline-flex; flex-wrap: wrap; gap: 0 1.1rem; }
+.fid-x { margin: 0 -.4rem 0 0; }
